@@ -1,0 +1,11 @@
+@AGENTS.md
+@.claude/HC_memory/gemini-session-bootstrap.md
+@.claude/HC_memory/current-state.md
+@.claude/HC_memory/file-map.md
+@.claude/HC_memory/features-audit.md
+@.claude/HC_memory/architecture.md
+@.claude/HC_memory/tech-stack.md
+@.claude/HC_memory/security-rules.md
+@.claude/HC_memory/api-contracts.md
+@.claude/HC_memory/coding-standards.md
+@.claude/HC_memory/database-schema.md

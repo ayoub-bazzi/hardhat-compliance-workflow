@@ -139,6 +139,7 @@ export interface Database {
         Row: {
           id: string;
           project_id: string;
+          user_id: string | null;
           company_name: string;
           contact_email: string;
           compliance_status: ComplianceStatus;
@@ -158,6 +159,7 @@ export interface Database {
         Insert: {
           id?: string;
           project_id: string;
+          user_id?: string | null;
           company_name: string;
           contact_email: string;
           compliance_status?: ComplianceStatus;
@@ -177,6 +179,7 @@ export interface Database {
         Update: {
           id?: string;
           project_id?: string;
+          user_id?: string | null;
           company_name?: string;
           contact_email?: string;
           compliance_status?: ComplianceStatus;
@@ -313,6 +316,8 @@ export interface Database {
           bonding_capacity_usd: number | null;
           trade_accreditation_no: string | null;
           submitted_at: string | null;
+          status: 'pending' | 'approved' | 'rejected';
+          review_notes: string | null;
         };
         Insert: {
           id?: string;
@@ -321,6 +326,8 @@ export interface Database {
           bonding_capacity_usd?: number | null;
           trade_accreditation_no?: string | null;
           submitted_at?: string | null;
+          status?: 'pending' | 'approved' | 'rejected';
+          review_notes?: string | null;
         };
         Update: {
           id?: string;
@@ -329,6 +336,8 @@ export interface Database {
           bonding_capacity_usd?: number | null;
           trade_accreditation_no?: string | null;
           submitted_at?: string | null;
+          status?: 'pending' | 'approved' | 'rejected';
+          review_notes?: string | null;
         };
         Relationships: [
           {
@@ -507,26 +516,26 @@ export interface Database {
       };
       nudge_logs: {
         Row: {
-          id: string;
-          subcontractor_id: string;
-          organization_id: string | null;
-          alert_type: NudgeAlertType;
-          channel: NudgeChannel;
-          recipient: string;
-          status: NudgeStatus;
-          metadata: Record<string, unknown>;
-          created_at: string;
+          id:                string;
+          subcontractor_id:  string;
+          organization_id:   string | null;
+          alert_type:        NudgeAlertType;
+          channel:           NudgeChannel;
+          recipient_contact: string;
+          status:            NudgeStatus;
+          metadata:          Record<string, unknown> | null;
+          created_at:        string | null;
         };
         Insert: {
-          id?: string;
-          subcontractor_id: string;
-          organization_id?: string | null;
-          alert_type: NudgeAlertType;
-          channel: NudgeChannel;
-          recipient: string;
-          status: NudgeStatus;
-          metadata?: Record<string, unknown>;
-          created_at?: string;
+          id?:               string;
+          subcontractor_id?: string | null;
+          organization_id?:  string | null;
+          alert_type:        string;
+          channel:           string;
+          recipient_contact: string;
+          status?:           string | null;
+          metadata?:         Record<string, unknown> | null;
+          created_at?:       string | null;
         };
         Update: never;
         Relationships: [
@@ -583,29 +592,29 @@ export interface Database {
       };
       in_app_notifications: {
         Row: {
-          id:               string;
-          organization_id:  string;
-          subcontractor_id: string | null;
-          event_type:       'DOCUMENT_REJECTED' | 'GATE_DENIED' | 'EXPIRY_WARNING' | 'PREQUAL_SUBMITTED';
-          title:            string;
-          body:             string;
-          link:             string | null;
-          is_read:          boolean;
-          created_at:       string;
+          id:              string;
+          user_id:         string | null;
+          organization_id: string | null;
+          type:            string | null;
+          title:           string;
+          message:         string;
+          link:            string | null;
+          is_read:         boolean | null;
+          created_at:      string | null;
         };
         Insert: {
-          id?:              string;
-          organization_id:  string;
-          subcontractor_id?: string | null;
-          event_type:       'DOCUMENT_REJECTED' | 'GATE_DENIED' | 'EXPIRY_WARNING' | 'PREQUAL_SUBMITTED';
-          title:            string;
-          body?:            string;
-          link?:            string | null;
-          is_read?:         boolean;
-          created_at?:      string;
+          id?:             string;
+          user_id?:        string | null;
+          organization_id?: string | null;
+          type?:           string | null;
+          title:           string;
+          message:         string;
+          link?:           string | null;
+          is_read?:        boolean | null;
+          created_at?:     string | null;
         };
         Update: {
-          is_read?: boolean;
+          is_read?: boolean | null;
         };
         Relationships: [];
       };
@@ -644,27 +653,21 @@ export interface Database {
       };
       push_subscriptions: {
         Row: {
-          id:              string;
-          user_id:         string;
-          organization_id: string | null;
-          endpoint:        string;
-          p256dh:          string;
-          auth:            string;
-          created_at:      string;
+          id:                string;
+          user_id:           string | null;
+          organization_id:   string | null;
+          subscription_json: Record<string, unknown>;
+          created_at:        string | null;
         };
         Insert: {
-          id?:             string;
-          user_id:         string;
-          organization_id?: string | null;
-          endpoint:        string;
-          p256dh:          string;
-          auth:            string;
-          created_at?:     string;
+          id?:               string;
+          user_id?:          string | null;
+          organization_id?:  string | null;
+          subscription_json: Record<string, unknown>;
+          created_at?:       string | null;
         };
         Update: {
-          endpoint?:       string;
-          p256dh?:         string;
-          auth?:           string;
+          subscription_json?: Record<string, unknown>;
         };
         Relationships: [];
       };
@@ -708,64 +711,33 @@ export interface Database {
       };
       payment_certificates: {
         Row: {
-          id:                   string;
-          organization_id:      string;
-          subcontractor_id:     string;
-          project_id:           string | null;
-          certificate_number:   string;
-          amount_claimed:       number;
-          period_from:          string;
-          period_to:            string;
-          status:               'pending' | 'escrowed' | 'approved' | 'released';
-          hold_reason:          string | null;
-          invoice_url:          string | null;
-          invoice_amount_ai:    number | null;
-          discrepancy_flagged:  boolean;
-          discrepancy_pct:      number | null;
-          risk_score_at_review: number | null;
-          reviewed_by:          string | null;
-          reviewed_at:          string | null;
-          released_by:          string | null;
-          released_at:          string | null;
-          created_at:           string;
-          updated_at:           string;
+          id:                        string;
+          organization_id:           string | null;
+          subcontractor_id:          string | null;
+          amount:                    number;
+          period_start:              string;
+          period_end:                string;
+          compliance_snapshot_score: number | null;
+          status:                    'pending' | 'escrowed' | 'approved' | 'released' | null;
+          rejection_reasons:         Record<string, unknown>[] | null;
+          created_at:                string | null;
         };
         Insert: {
-          id?:                  string;
-          organization_id:      string;
-          subcontractor_id:     string;
-          project_id?:          string | null;
-          certificate_number:   string;
-          amount_claimed:       number;
-          period_from:          string;
-          period_to:            string;
-          status?:              'pending' | 'escrowed' | 'approved' | 'released';
-          hold_reason?:         string | null;
-          invoice_url?:         string | null;
-          invoice_amount_ai?:   number | null;
-          discrepancy_flagged?: boolean;
-          discrepancy_pct?:     number | null;
-          risk_score_at_review?: number | null;
-          reviewed_by?:         string | null;
-          reviewed_at?:         string | null;
-          released_by?:         string | null;
-          released_at?:         string | null;
-          created_at?:          string;
-          updated_at?:          string;
+          id?:                        string;
+          organization_id?:           string | null;
+          subcontractor_id?:          string | null;
+          amount:                     number;
+          period_start:               string;
+          period_end:                 string;
+          compliance_snapshot_score?: number | null;
+          status?:                    'pending' | 'escrowed' | 'approved' | 'released' | null;
+          rejection_reasons?:         Record<string, unknown>[] | null;
+          created_at?:                string | null;
         };
         Update: {
-          status?:              'pending' | 'escrowed' | 'approved' | 'released';
-          hold_reason?:         string | null;
-          invoice_url?:         string | null;
-          invoice_amount_ai?:   number | null;
-          discrepancy_flagged?: boolean;
-          discrepancy_pct?:     number | null;
-          risk_score_at_review?: number | null;
-          reviewed_by?:         string | null;
-          reviewed_at?:         string | null;
-          released_by?:         string | null;
-          released_at?:         string | null;
-          updated_at?:          string;
+          status?:                    'pending' | 'escrowed' | 'approved' | 'released' | null;
+          compliance_snapshot_score?: number | null;
+          rejection_reasons?:         Record<string, unknown>[] | null;
         };
         Relationships: [
           {
@@ -778,35 +750,28 @@ export interface Database {
       };
       site_journals: {
         Row: {
-          id:                   string;
-          organization_id:      string;
-          project_id:           string | null;
-          photo_url:            string | null;
-          work_phase:           string | null;
-          photo_quality:        'high' | 'medium' | 'low';
-          ai_summary:           string;
-          caveats:              string[];
-          attendance_context:   Record<string, unknown>;
-          created_at:           string;
+          id:               string;
+          organization_id:  string | null;
+          photo_url:        string | null;
+          ai_summary:       string | null;
+          ai_caveats:       unknown[] | null;
+          ai_quality_rating: string | null;
+          created_at:       string | null;
         };
         Insert: {
-          id?:                  string;
-          organization_id:      string;
-          project_id?:          string | null;
-          photo_url?:           string | null;
-          work_phase?:          string | null;
-          photo_quality?:       'high' | 'medium' | 'low';
-          ai_summary:           string;
-          caveats?:             string[];
-          attendance_context?:  Record<string, unknown>;
-          created_at?:          string;
+          id?:               string;
+          organization_id?:  string | null;
+          photo_url?:        string | null;
+          ai_summary?:       string | null;
+          ai_caveats?:       unknown[] | null;
+          ai_quality_rating?: string | null;
+          created_at?:       string | null;
         };
         Update: {
-          photo_url?:           string | null;
-          work_phase?:          string | null;
-          photo_quality?:       'high' | 'medium' | 'low';
-          ai_summary?:          string;
-          caveats?:             string[];
+          photo_url?:        string | null;
+          ai_summary?:       string | null;
+          ai_caveats?:       unknown[] | null;
+          ai_quality_rating?: string | null;
         };
         Relationships: [
           {

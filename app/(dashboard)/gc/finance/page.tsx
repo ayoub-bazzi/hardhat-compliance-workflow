@@ -1,9 +1,8 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
-import { Landmark, ShieldCheck, ShieldX, AlertTriangle, Users, Loader2 } from 'lucide-react'
+import { Landmark, ShieldCheck, ShieldX, AlertTriangle, Users } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { RiskScoreBar } from '@/components/risk-score-bar'
 import { ReleaseButton } from './release-button'
 import { ExportLedgerButton } from './export-button'
 import type { PaymentStatus } from '@/types/database.types'
@@ -86,25 +85,16 @@ function FinanceSkeleton() {
 async function FinanceData() {
   const supabase = await createClient()
 
-  const [subsResult, flaggedResult, projectsResult] = await Promise.all([
+  const [subsResult, projectsResult] = await Promise.all([
     supabase
       .from('subcontractors')
-      .select('id, company_name, contact_email, risk_score, compliance_status, payment_status, project_id')
-      .order('risk_score', { ascending: false }),
-    supabase
-      .from('compliance_docs')
-      .select('subcontractor_id')
-      .eq('audit_status', 'Flagged'),
+      .select('id, company_name, contact_email, compliance_status, payment_status, project_id')
+      .order('company_name', { ascending: true }),
     supabase.from('projects').select('id, name'),
   ])
 
   const subs     = subsResult.data ?? []
   const projects = Object.fromEntries((projectsResult.data ?? []).map((p) => [p.id, p.name]))
-
-  const flaggedCounts: Record<string, number> = {}
-  for (const d of flaggedResult.data ?? []) {
-    flaggedCounts[d.subcontractor_id] = (flaggedCounts[d.subcontractor_id] ?? 0) + 1
-  }
 
   const clearCount   = subs.filter((s) => s.payment_status === 'Clear to Pay').length
   const holdCount    = subs.filter((s) => s.payment_status === 'Compliance Hold').length
@@ -125,22 +115,35 @@ async function FinanceData() {
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3.5">
           <div>
             <h2 className="text-sm font-semibold text-slate-700">Payment Ledger</h2>
-            <p className="text-xs text-slate-400">Sorted by highest risk. Compliance Hold requires manual release before payment.</p>
+            <p className="text-xs text-slate-400">Compliance Hold requires a manual release before payment can proceed.</p>
           </div>
           <ExportLedgerButton />
         </div>
 
         {subs.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <Landmark className="h-10 w-10 text-slate-300" />
-            <p className="text-sm font-medium text-slate-500">No subcontractors yet</p>
+          <div className="flex flex-col items-center gap-4 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
+              <Landmark className="h-7 w-7 text-slate-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-700">No vendors in the ledger yet</p>
+              <p className="mt-1 text-xs text-slate-400 max-w-xs mx-auto">
+                Add subcontractors to a project. Their payment status will appear here once their compliance docs are reviewed.
+              </p>
+            </div>
+            <Link
+              href="/gc/projects"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition-colors"
+            >
+              Go to Dashboard →
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {['Subcontractor', 'Project', 'Risk Score', 'Compliance', 'Payment Status', 'Flags', 'Action'].map((h) => (
+                  {['Subcontractor', 'Project', 'Compliance', 'Payment Status', 'Action'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 first:pl-5 last:pr-5">
                       {h}
                     </th>
@@ -148,71 +151,54 @@ async function FinanceData() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {subs.map((sub) => {
-                  const flags = flaggedCounts[sub.id] ?? 0
-                  return (
-                    <tr
-                      key={sub.id}
-                      className={`transition-colors hover:bg-slate-50/80 ${
-                        sub.payment_status === 'Compliance Hold'
-                          ? 'bg-red-50/40'
-                          : sub.payment_status === 'Manual Review' && sub.risk_score >= 31
-                          ? 'bg-amber-50/20'
-                          : ''
-                      }`}
-                    >
-                      <td className="py-3.5 pl-5 pr-4">
-                        <Link href={`/gc/risk/${sub.id}`} className="group">
-                          <p className="font-medium text-slate-900 transition-colors group-hover:text-indigo-600">
-                            {sub.company_name}
-                          </p>
-                          <p className="text-xs text-slate-400">{sub.contact_email}</p>
+                {subs.map((sub) => (
+                  <tr
+                    key={sub.id}
+                    className={`transition-colors hover:bg-slate-50/80 ${
+                      sub.payment_status === 'Compliance Hold' ? 'bg-red-50/40' : ''
+                    }`}
+                  >
+                    <td className="py-3.5 pl-5 pr-4">
+                      <Link href={`/gc/risk/${sub.id}`} className="group">
+                        <p className="font-medium text-slate-900 transition-colors group-hover:text-indigo-600">
+                          {sub.company_name}
+                        </p>
+                        <p className="text-xs text-slate-400">{sub.contact_email}</p>
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3.5 text-sm text-slate-600">
+                      {projects[(sub as { project_id?: string }).project_id ?? ''] ?? (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
+                        sub.compliance_status === 'compliant'
+                          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                          : sub.compliance_status === 'non_compliant'
+                          ? 'bg-red-50 text-red-700 ring-red-200'
+                          : 'bg-amber-50 text-amber-700 ring-amber-200'
+                      }`}>
+                        {sub.compliance_status === 'compliant' ? 'Compliant' : sub.compliance_status === 'non_compliant' ? 'Non-Compliant' : 'Warning'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3.5">
+                      <PaymentStatusPill status={sub.payment_status as PaymentStatus} />
+                    </td>
+                    <td className="px-4 py-3.5 pr-5">
+                      {sub.payment_status === 'Compliance Hold' ? (
+                        <ReleaseButton subId={sub.id} companyName={sub.company_name} />
+                      ) : (
+                        <Link
+                          href={`/gc/risk/${sub.id}`}
+                          className="text-xs font-medium text-indigo-600 hover:underline"
+                        >
+                          View Profile →
                         </Link>
-                      </td>
-                      <td className="px-4 py-3.5 text-sm text-slate-600">
-                        {projects[(sub as { project_id?: string }).project_id ?? ''] ?? (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <RiskScoreBar score={sub.risk_score ?? 0} />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
-                          sub.compliance_status === 'compliant'
-                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                            : sub.compliance_status === 'non_compliant'
-                            ? 'bg-red-50 text-red-700 ring-red-200'
-                            : 'bg-amber-50 text-amber-700 ring-amber-200'
-                        }`}>
-                          {sub.compliance_status === 'compliant' ? 'Compliant' : sub.compliance_status === 'non_compliant' ? 'Non-Compliant' : 'Warning'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <PaymentStatusPill status={sub.payment_status as PaymentStatus} />
-                      </td>
-                      <td className="px-4 py-3.5 tabular-nums">
-                        {flags > 0 ? (
-                          <span className="font-semibold text-red-600">{flags} flagged</span>
-                        ) : (
-                          <span className="text-slate-400">None</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 pr-5">
-                        {sub.payment_status === 'Compliance Hold' ? (
-                          <ReleaseButton subId={sub.id} companyName={sub.company_name} />
-                        ) : (
-                          <Link
-                            href={`/gc/risk/${sub.id}`}
-                            className="text-xs font-medium text-indigo-600 hover:underline"
-                          >
-                            View Profile →
-                          </Link>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
+                      )}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

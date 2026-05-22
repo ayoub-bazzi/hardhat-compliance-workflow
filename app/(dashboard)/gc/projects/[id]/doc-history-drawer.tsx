@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Clock, AlertCircle, Loader2, Trash2 } from 'lucide-react'
+import { formatRejectionReason } from '@/lib/utils'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet'
@@ -133,9 +134,11 @@ export function DocHistoryDrawer({
                       {doc.rejection_reason && (
                         <div className="mt-2 flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5">
                           <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-                          <span className="text-xs leading-snug text-red-700">
-                            {doc.rejection_reason}
-                          </span>
+                          <ul className="space-y-0.5">
+                            {formatRejectionReason(doc.rejection_reason).map((reason, i) => (
+                              <li key={i} className="text-xs leading-snug text-red-700">· {reason}</li>
+                            ))}
+                          </ul>
                         </div>
                       )}
 

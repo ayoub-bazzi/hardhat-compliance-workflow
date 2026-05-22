@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
+import { callGeminiWithTimeout } from '@/lib/utils'
 
 export const runtime = 'nodejs'
 
@@ -29,18 +30,19 @@ function safeParseJson(raw: string): GeminiInvoiceResponse {
 }
 
 async function extractInvoiceAmount(base64: string, mimeType: string): Promise<GeminiInvoiceResponse> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } },
+    { apiVersion: 'v1beta' },
+  )
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType, data: base64 } },
-    `You are an AI financial document analyst. Extract the TOTAL AMOUNT DUE from this invoice image or PDF.
+  const result = await callGeminiWithTimeout(() =>
+    model.generateContent([
+      { inlineData: { mimeType, data: base64 } },
+      `You are an AI financial document analyst. Extract the TOTAL AMOUNT DUE from this invoice image or PDF.
 
 Look for:
 - "Total", "Total Due", "Amount Due", "Grand Total", "Invoice Total", "Net Total", "Montant Total", "المبلغ الإجمالي"
@@ -58,7 +60,8 @@ Return ONLY a valid JSON object:
 Set confidence to "low" if the image is blurry, partially cut off, or the total is ambiguous.
 If multiple totals are visible (subtotal, VAT, grand total), extract only the GRAND TOTAL.
 Do NOT invent numbers. If unsure, set invoice_total to null.`,
-  ])
+    ])
+  )
 
   return safeParseJson(result.response.text())
 }
@@ -82,7 +85,7 @@ export async function POST(request: Request) {
   const service = createServiceSupabaseClient()
   const { data: cert } = await service
     .from('payment_certificates')
-    .select('id, amount_claimed, organization_id')
+    .select('id, amount, organization_id')
     .eq('id', body.certId)
     .single()
 
@@ -115,22 +118,12 @@ export async function POST(request: Request) {
   }
 
   // Discrepancy calculation
-  const discrepancyFlagged = gemini.invoice_total !== null &&
-    Math.abs((gemini.invoice_total - cert.amount_claimed) / cert.amount_claimed) * 100 > DISCREPANCY_THRESHOLD_PCT
-  const discrepancyPct = gemini.invoice_total !== null
-    ? Math.abs(((gemini.invoice_total - cert.amount_claimed) / cert.amount_claimed) * 100)
+  const certAmount = cert.amount ?? 0
+  const discrepancyFlagged = gemini.invoice_total !== null && certAmount > 0 &&
+    Math.abs((gemini.invoice_total - certAmount) / certAmount) * 100 > DISCREPANCY_THRESHOLD_PCT
+  const discrepancyPct = gemini.invoice_total !== null && certAmount > 0
+    ? Math.abs(((gemini.invoice_total - certAmount) / certAmount) * 100)
     : null
-
-  // Update certificate with AI results
-  await service
-    .from('payment_certificates')
-    .update({
-      invoice_url:         invoiceUrl,
-      invoice_amount_ai:   gemini.invoice_total,
-      discrepancy_flagged: discrepancyFlagged,
-      discrepancy_pct:     discrepancyPct,
-    })
-    .eq('id', body.certId)
 
   return Response.json({
     ok:                  true,
@@ -141,6 +134,7 @@ export async function POST(request: Request) {
     notes:               gemini.notes,
     discrepancy_flagged: discrepancyFlagged,
     discrepancy_pct:     discrepancyPct,
-    amount_claimed:      cert.amount_claimed,
+    amount:              certAmount,
+    invoice_url:         invoiceUrl,
   })
 }

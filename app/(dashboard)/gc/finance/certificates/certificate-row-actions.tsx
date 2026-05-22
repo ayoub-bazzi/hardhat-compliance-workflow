@@ -3,21 +3,22 @@
 import { useState, useTransition } from 'react'
 import {
   ShieldCheck, ShieldX, Loader2, CheckCircle2, AlertTriangle,
-  Lock, Unlock, ChevronDown, ChevronUp,
+  Lock, Unlock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { reviewCertificate, releaseCertificate } from './certificate-actions'
 import type { CertStatus } from '@/types/database.types'
 
-const STATUS_CONFIG: Record<CertStatus, { label: string; cls: string }> = {
+const STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
   pending:  { label: 'Pending Review', cls: 'bg-slate-100 text-slate-600 ring-slate-300' },
   escrowed: { label: 'Escrowed',       cls: 'bg-amber-100 text-amber-700 ring-amber-300' },
   approved: { label: 'Approved',       cls: 'bg-emerald-100 text-emerald-700 ring-emerald-300' },
   released: { label: 'Released',       cls: 'bg-indigo-100 text-indigo-700 ring-indigo-300' },
 }
+const DEFAULT_STATUS = { label: 'Unknown', cls: 'bg-slate-100 text-slate-400 ring-slate-200' }
 
 export function CertificateStatusBadge({ status }: { status: CertStatus }) {
-  const cfg = STATUS_CONFIG[status]
+  const cfg = STATUS_CONFIG[status ?? ''] ?? DEFAULT_STATUS
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${cfg.cls}`}>
       {cfg.label}
@@ -29,20 +30,15 @@ export function CertificateRowActions({
   certId,
   status,
   riskScore,
-  holdReason,
-  discrepancyFlagged,
 }: {
-  certId:             string
-  status:             CertStatus
-  riskScore:          number
-  holdReason:         string | null
-  discrepancyFlagged: boolean
+  certId:    string
+  status:    CertStatus
+  riskScore: number
 }) {
   const [pending, start]      = useTransition()
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [releaseReason, setReleaseReason] = useState('')
-  const [showRelease, setShowRelease]     = useState(false)
-  const [showHoldInfo, setShowHoldInfo]   = useState(false)
+  const [showRelease, setShowRelease] = useState(false)
 
   function handleReview() {
     setFeedback(null)
@@ -68,7 +64,7 @@ export function CertificateRowActions({
     })
   }
 
-  if (status === 'released') {
+  if (!status || status === 'released') {
     return (
       <span className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold">
         <CheckCircle2 className="h-3.5 w-3.5" /> Released
@@ -78,13 +74,6 @@ export function CertificateRowActions({
 
   return (
     <div className="space-y-2">
-      {/* Discrepancy warning */}
-      {discrepancyFlagged && (
-        <div className="flex items-center gap-1.5 text-[10px] text-amber-700 font-semibold">
-          <AlertTriangle className="h-3 w-3 shrink-0" /> Invoice discrepancy
-        </div>
-      )}
-
       {/* Risk block indicator */}
       {riskScore > 30 && status === 'pending' && (
         <div className="flex items-center gap-1.5 text-[10px] text-amber-700">
@@ -115,19 +104,9 @@ export function CertificateRowActions({
       {/* Escrowed: hold info + release */}
       {status === 'escrowed' && (
         <>
-          <button
-            type="button"
-            onClick={() => setShowHoldInfo((v) => !v)}
-            className="flex items-center gap-1 text-[10px] text-amber-700 hover:text-amber-900 font-medium"
-          >
-            <ShieldX className="h-3 w-3" /> Hold reason
-            {showHoldInfo ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          {showHoldInfo && holdReason && (
-            <p className="text-[10px] text-amber-800 border border-amber-200 bg-amber-50 rounded px-2 py-1.5 max-w-[200px]">
-              {holdReason}
-            </p>
-          )}
+          <div className="flex items-center gap-1 text-[10px] text-amber-700 font-medium">
+            <ShieldX className="h-3 w-3" /> Compliance hold active
+          </div>
           <button
             type="button"
             onClick={() => setShowRelease((v) => !v)}

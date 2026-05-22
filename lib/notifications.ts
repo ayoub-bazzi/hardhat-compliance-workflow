@@ -45,11 +45,11 @@ async function logNudge(
   metadata: Record<string, unknown>,
 ) {
   await supabase.from('nudge_logs').insert({
-    subcontractor_id: subId,
-    organization_id: orgId ?? undefined,
-    alert_type: alertType,
+    subcontractor_id:  subId,
+    organization_id:   orgId ?? undefined,
+    alert_type:        alertType,
     channel,
-    recipient,
+    recipient_contact: recipient,
     status,
     metadata,
   })

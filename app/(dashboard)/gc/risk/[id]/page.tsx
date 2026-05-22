@@ -4,7 +4,7 @@ import {
   ArrowLeft, ShieldCheck, ShieldAlert, ShieldX,
   FileText, Clock, Phone, Mail, GitBranch,
 } from 'lucide-react'
-import { createClient } from '@/lib/supabase'
+import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
 import { QRPass } from '@/components/qr-pass'
 import { Badge } from '@/components/ui/badge'
 import { AuditTimeline } from '@/components/audit-timeline'
@@ -69,7 +69,7 @@ export default async function SubcontractorPassPage({
     .from('prequal_submissions')
     .select('*')
     .eq('subcontractor_id', id)
-    .order('created_at', { ascending: false })
+    .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -81,6 +81,16 @@ export default async function SubcontractorPassPage({
   )
 
   const isGranted = !hasExpired && !hasFlagged && !hasLegacyIssues && allDocs.length > 0
+
+  // Resolve profile photo storage path to a signed URL (profile-photos bucket is private).
+  const rawPhotoPath = sub.profile_photo_url ?? null
+  let profilePhotoUrl: string | null = rawPhotoPath
+  if (rawPhotoPath && !rawPhotoPath.startsWith('http')) {
+    const { data: signed } = await createServiceSupabaseClient().storage
+      .from('profile-photos')
+      .createSignedUrl(rawPhotoPath, 3600)
+    profilePhotoUrl = signed?.signedUrl ?? null
+  }
 
   return (
     <div className="space-y-6">
@@ -251,7 +261,7 @@ export default async function SubcontractorPassPage({
       <PhotoManagement
         subId={sub.id}
         companyName={sub.company_name}
-        photoUrl={sub.profile_photo_url ?? null}
+        photoUrl={profilePhotoUrl}
       />
 
       {/* Safety induction tracker */}

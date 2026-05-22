@@ -19,6 +19,7 @@ import { SubActionsMenu } from './sub-actions-menu'
 import { DocActionsMenu, ReplaceDocumentButton } from './doc-actions-menu'
 import { ForceApproveButton } from './force-approve-button'
 import { DocHistoryDrawer } from './doc-history-drawer'
+import { formatRejectionReason } from '@/lib/utils'
 import type { Project, Subcontractor, Document } from '@/types/database.types'
 
 // ── Shared badge helpers ───────────────────────────────────────
@@ -341,9 +342,11 @@ async function DocumentsTable({
                     {doc.status === 'rejected' && doc.rejection_reason && (
                       <div className="flex items-start gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5">
                         <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-red-500" />
-                        <span className="text-xs leading-snug text-red-700">
-                          {doc.rejection_reason}
-                        </span>
+                        <ul className="space-y-0.5">
+                          {formatRejectionReason(doc.rejection_reason).map((reason, i) => (
+                            <li key={i} className="text-xs leading-snug text-red-700">· {reason}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                     {doc.status === 'rejected' && (

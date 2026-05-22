@@ -6,19 +6,23 @@ import Link from 'next/link'
 import { Bell, ShieldX, FileX, Clock, CheckCheck, X } from 'lucide-react'
 import { createBrowserClient } from '@/lib/supabase'
 import { markAllNotificationsRead, markNotificationRead } from '@/app/(dashboard)/gc/notifications/actions'
-import type { InAppNotification } from '@/types/database.types'
-
-// ── Event type config ──────────────────────────────────────────
-
-const EVENT_CONFIG: Record<
-  InAppNotification['event_type'],
-  { icon: React.ElementType; dot: string; label: string }
-> = {
-  DOCUMENT_REJECTED: { icon: FileX,    dot: 'bg-red-500',    label: 'Document Rejected' },
-  GATE_DENIED:       { icon: ShieldX,  dot: 'bg-red-600',    label: 'Gate Denied'        },
-  EXPIRY_WARNING:    { icon: Clock,    dot: 'bg-amber-500',  label: 'Expiry Warning'    },
-  PREQUAL_SUBMITTED: { icon: Bell,     dot: 'bg-indigo-500', label: 'Prequal Submitted' },
+type Notif = {
+  id:         string
+  type:       string | null
+  title:      string
+  message:    string
+  link:       string | null
+  is_read:    boolean | null
+  created_at: string
 }
+
+const TYPE_CONFIG: Record<string, { icon: React.ElementType; dot: string }> = {
+  error:   { icon: FileX,   dot: 'bg-red-500'    },
+  warning: { icon: Clock,   dot: 'bg-amber-500'  },
+  success: { icon: Bell,    dot: 'bg-emerald-500' },
+  info:    { icon: Bell,    dot: 'bg-indigo-500' },
+}
+const DEFAULT_CONFIG = { icon: Bell, dot: 'bg-indigo-500' }
 
 // ── Single notification row ────────────────────────────────────
 
@@ -27,11 +31,11 @@ function NotifRow({
   onRead,
   onClose,
 }: {
-  notif: InAppNotification
+  notif: Notif
   onRead: (id: string) => void
   onClose: () => void
 }) {
-  const cfg = EVENT_CONFIG[notif.event_type] ?? EVENT_CONFIG.DOCUMENT_REJECTED
+  const cfg = TYPE_CONFIG[notif.type ?? 'info'] ?? DEFAULT_CONFIG
   const Icon = cfg.icon
   const ts = new Date(notif.created_at).toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -46,7 +50,7 @@ function NotifRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-white leading-snug">{notif.title}</p>
-        <p className="mt-0.5 text-xs text-slate-400 leading-snug">{notif.body}</p>
+        <p className="mt-0.5 text-xs text-slate-400 leading-snug">{notif.message}</p>
         <p className="mt-1 text-[10px] text-slate-600 tabular-nums">{ts}</p>
       </div>
       {!notif.is_read && (
@@ -75,7 +79,7 @@ function NotifRow({
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const [notifs, setNotifs] = useState<InAppNotification[]>([])
+  const [notifs, setNotifs] = useState<Notif[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [mounted, setMounted] = useState(false)
   const bellRef = useRef<HTMLButtonElement>(null)
@@ -87,10 +91,10 @@ export function NotificationBell() {
     const supabase = createBrowserClient()
     const { data } = await supabase
       .from('in_app_notifications')
-      .select('id, event_type, title, body, link, is_read, created_at')
+      .select('id, type, title, message, link, is_read, created_at')
       .order('created_at', { ascending: false })
       .limit(5)
-    const rows = (data ?? []) as InAppNotification[]
+    const rows = (data ?? []) as Notif[]
     setNotifs(rows)
     setUnreadCount(rows.filter((n) => !n.is_read).length)
   }, [])
@@ -109,7 +113,7 @@ export function NotificationBell() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'in_app_notifications' },
         (payload) => {
-          const n = payload.new as InAppNotification
+          const n = payload.new as Notif
           setNotifs((prev) => [n, ...prev].slice(0, 5))
           setUnreadCount((c) => c + 1)
         },

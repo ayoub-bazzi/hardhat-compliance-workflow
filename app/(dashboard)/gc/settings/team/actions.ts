@@ -127,7 +127,7 @@ export async function inviteTeamMember(
   await supabase.rpc('fn_log_audit_event', {
     p_subcontractor_id: null,
     p_organization_id:  callerProfile.organization_id,
-    p_event_type:       'Invite Sent',
+    p_event_type:       'Audit',
     p_description:      `Team invite sent to ${email} with role: ${intendedRole}.`,
     p_actor:            user.email ?? 'Admin',
     p_metadata: {

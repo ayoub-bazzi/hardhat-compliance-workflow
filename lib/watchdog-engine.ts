@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, NotificationLogType, NotificationChannel, NotificationStatus } from '@/types/database.types'
+import type { Database, NudgeAlertType } from '@/types/database.types'
 
 type DBClient = SupabaseClient<Database>
 
@@ -24,37 +24,32 @@ type SubRow = {
 
 type ExpiringDocRow = {
   id: string
-  doc_name: string
-  doc_type: string
+  type: string
   expiry_date: string
   subcontractors: SubRow | null
 }
 
-type FlaggedDocRow = {
+type RejectedDocRow = {
   id: string
-  doc_name: string
-  doc_type: string
-  updated_at: string
+  type: string
+  created_at: string
   subcontractors: SubRow | null
 }
 
-// ── Cooldown guard ─────────────────────────────────────────────
-// The 72-hour window prevents the same subcontractor from receiving
-// the same notification type more than once in a 72-hour period —
-// regardless of how many documents triggered it.
+// ── Cooldown guard (72h) using nudge_logs ──────────────────────
 
 async function isOnCooldown(
   supabase: DBClient,
   subId: string,
-  type: NotificationLogType,
+  alertType: NudgeAlertType,
 ): Promise<boolean> {
   const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
   const { data } = await supabase
-    .from('notification_logs')
+    .from('nudge_logs')
     .select('id')
     .eq('subcontractor_id', subId)
-    .eq('type', type)
-    .gte('sent_at', cutoff)
+    .eq('alert_type', alertType)
+    .gte('created_at', cutoff)
     .limit(1)
   return (data ?? []).length > 0
 }
@@ -63,18 +58,17 @@ async function recordNotification(
   supabase: DBClient,
   subId: string,
   orgId: string | null,
-  type: NotificationLogType,
-  channel: NotificationChannel,
+  alertType: NudgeAlertType,
   recipient: string,
-  status: NotificationStatus,
+  status: string,
   metadata: Record<string, unknown>,
 ): Promise<void> {
-  await supabase.from('notification_logs').insert({
+  await supabase.from('nudge_logs').insert({
     subcontractor_id: subId,
-    organization_id: orgId ?? undefined,
-    type,
-    channel,
-    recipient,
+    organization_id:  orgId ?? undefined,
+    channel:          'email',
+    alert_type:       alertType,
+    recipient_contact: recipient,
     status,
     metadata,
   })
@@ -86,7 +80,6 @@ async function logToGoldenThread(
   supabase: DBClient,
   subId: string,
   orgId: string | null,
-  type: NotificationLogType,
   description: string,
 ): Promise<void> {
   await supabase.rpc('fn_log_audit_event', {
@@ -95,7 +88,7 @@ async function logToGoldenThread(
     p_event_type:       'Nudge Sent',
     p_description:      description,
     p_actor:            'Compliance Watchdog',
-    p_metadata:         { notification_type: type },
+    p_metadata:         {},
   })
 }
 
@@ -128,7 +121,6 @@ function buildWatchdogEmailHtml({
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 16px;">
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-        <!-- Header -->
         <tr>
           <td style="background:#0f172a;border-radius:12px 12px 0 0;padding:28px 40px;text-align:center;">
             <p style="margin:0;font-size:26px;">🏗️</p>
@@ -136,7 +128,6 @@ function buildWatchdogEmailHtml({
             <p style="margin:4px 0 0;color:#94a3b8;font-size:12px;">Automated Compliance Concierge</p>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="background:#fff;padding:40px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
             <span style="display:inline-block;background:${badgeBg};border:1px solid ${badgeBorder};border-radius:6px;padding:7px 14px;color:${badgeText};font-size:12px;font-weight:700;letter-spacing:0.4px;margin-bottom:24px;">${badge}</span>
@@ -159,7 +150,6 @@ function buildWatchdogEmailHtml({
             </p>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
           <td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:18px 40px;text-align:center;">
             <p style="margin:0;color:#94a3b8;font-size:11px;line-height:1.6;">
@@ -178,7 +168,6 @@ function expiryWarningEmail(
   companyName: string,
   projectName: string,
   docType: string,
-  docName: string,
   daysUntil: number,
   link: string,
 ): { subject: string; html: string } {
@@ -195,8 +184,8 @@ function expiryWarningEmail(
     headline:    `Your access to ${projectName} is at risk`,
     subline:     `Your <strong>${docType}</strong> expires in <strong>${daysUntil} day${daysUntil !== 1 ? 's' : ''}</strong>. Upload your renewed certificate now to avoid losing site access.`,
     bodyHtml:    urgent
-      ? `<strong>Document:</strong> ${docName}<br/><strong>Project:</strong> ${projectName}<br/><strong>Time remaining:</strong> ${daysUntil} day${daysUntil !== 1 ? 's' : ''}<br/><br/>This is your final warning. If the document is not renewed before expiry, your site access pass will be <strong>automatically revoked</strong> and a Compliance Hold will be placed on pending payments.`
-      : `<strong>Document:</strong> ${docName}<br/><strong>Project:</strong> ${projectName}<br/><strong>Time remaining:</strong> ${daysUntil} days<br/><br/>Please upload a renewed certificate as soon as possible. AI verification takes less than 30 seconds.`,
+      ? `<strong>Document:</strong> ${docType}<br/><strong>Project:</strong> ${projectName}<br/><strong>Time remaining:</strong> ${daysUntil} day${daysUntil !== 1 ? 's' : ''}<br/><br/>This is your final warning. If the document is not renewed before expiry, your site access pass will be <strong>automatically revoked</strong> and a Compliance Hold will be placed on pending payments.`
+      : `<strong>Document:</strong> ${docType}<br/><strong>Project:</strong> ${projectName}<br/><strong>Time remaining:</strong> ${daysUntil} days<br/><br/>Please upload a renewed certificate as soon as possible. AI verification takes less than 30 seconds.`,
     ctaBg:       urgent ? '#dc2626' : '#d97706',
     ctaLabel:    'Upload Renewed Certificate',
     companyName,
@@ -210,10 +199,9 @@ function auditRejectionEmail(
   companyName: string,
   projectName: string,
   docType: string,
-  docName: string,
   link: string,
 ): { subject: string; html: string } {
-  const subject = `🚨 Document Rejected: ${docName} — immediate action required`
+  const subject = `🚨 Document Rejected: ${docType} — immediate action required`
 
   const html = buildWatchdogEmailHtml({
     badge:       '🚨 AI COMPLIANCE FAILURE',
@@ -221,8 +209,8 @@ function auditRejectionEmail(
     badgeBorder: '#fca5a5',
     badgeText:   '#b91c1c',
     headline:    `A ${docType} has been rejected`,
-    subline:     `Your <strong>${docName}</strong> for <strong>${projectName}</strong> was flagged during AI compliance review and must be replaced.`,
-    bodyHtml:    `<strong>Document:</strong> ${docName}<br/><strong>Type:</strong> ${docType}<br/><strong>Project:</strong> ${projectName}<br/><br/>Site access will be <strong>blocked</strong> until a compliant replacement document is uploaded. Upload a corrected version now — AI re-verification takes under 30 seconds. Your General Contractor has been notified.`,
+    subline:     `Your <strong>${docType}</strong> for <strong>${projectName}</strong> was flagged during AI compliance review and must be replaced.`,
+    bodyHtml:    `<strong>Document:</strong> ${docType}<br/><strong>Project:</strong> ${projectName}<br/><br/>Site access will be <strong>blocked</strong> until a compliant replacement document is uploaded. Upload a corrected version now — AI re-verification takes under 30 seconds. Your General Contractor has been notified.`,
     ctaBg:       '#dc2626',
     ctaLabel:    'Upload Corrected Document',
     companyName,
@@ -245,22 +233,22 @@ async function runExpiryWarningPass(
   const in15Str = in15.toISOString().split('T')[0]
 
   const { data: rawDocs } = await supabase
-    .from('compliance_docs')
+    .from('documents')
     .select(`
-      id, doc_name, doc_type, expiry_date,
+      id, type, expiry_date,
       subcontractors (
         id, company_name, contact_email, primary_contact_phone,
         invite_token, organization_id, project_id
       )
     `)
-    .neq('audit_status', 'Flagged')
+    .eq('status', 'approved')
+    .eq('is_current', true)
     .not('expiry_date', 'is', null)
     .gte('expiry_date', todayStr)
     .lte('expiry_date', in15Str)
 
   const docs = (rawDocs ?? []) as unknown as ExpiringDocRow[]
 
-  // Resolve project names in one query
   const projectIds = [...new Set(
     docs.map((d) => d.subcontractors?.project_id).filter(Boolean) as string[]
   )]
@@ -278,7 +266,7 @@ async function runExpiryWarningPass(
     const sub = doc.subcontractors
     if (!sub) continue
 
-    const onCooldown = await isOnCooldown(supabase, sub.id, 'EXPIRY_WARNING')
+    const onCooldown = await isOnCooldown(supabase, sub.id, 'expiry_7d')
     if (onCooldown) { skipped_cooldown++; continue }
 
     const daysUntil = Math.round(
@@ -287,7 +275,7 @@ async function runExpiryWarningPass(
     const projectName = projectMap[sub.project_id] ?? 'Your Project'
     const link = portalUrl(sub.invite_token)
     const { subject, html } = expiryWarningEmail(
-      sub.company_name, projectName, doc.doc_type, doc.doc_name, daysUntil, link
+      sub.company_name, projectName, doc.type, daysUntil, link
     )
 
     const { error } = await resend.emails.send({
@@ -297,17 +285,17 @@ async function runExpiryWarningPass(
       html,
     })
 
-    const status: NotificationStatus = error ? 'failed' : 'sent'
+    const status = error ? 'failed' : 'sent'
 
-    await recordNotification(supabase, sub.id, sub.organization_id, 'EXPIRY_WARNING', 'EMAIL',
+    await recordNotification(supabase, sub.id, sub.organization_id, 'expiry_7d',
       sub.contact_email, status,
-      { doc_id: doc.id, doc_name: doc.doc_name, doc_type: doc.doc_type, days_until: daysUntil, project: projectName }
+      { doc_id: doc.id, doc_type: doc.type, days_until: daysUntil, project: projectName }
     )
 
     if (!error) {
       await logToGoldenThread(
-        supabase, sub.id, sub.organization_id, 'EXPIRY_WARNING',
-        `Expiry warning sent to ${sub.contact_email} — "${doc.doc_name}" expires in ${daysUntil} day${daysUntil !== 1 ? 's' : ''} (${projectName}).`,
+        supabase, sub.id, sub.organization_id,
+        `Expiry warning sent to ${sub.contact_email} — ${doc.type} expires in ${daysUntil} day${daysUntil !== 1 ? 's' : ''} (${projectName}).`,
       )
       sent++
     }
@@ -316,7 +304,7 @@ async function runExpiryWarningPass(
   return { scanned: docs.length, sent, skipped_cooldown }
 }
 
-// ── Pass 2: Audit Rejection (recently flagged, 24h window) ────
+// ── Pass 2: Audit Rejection (rejected in last 24h) ─────────────
 
 async function runAuditRejectionPass(
   supabase: DBClient,
@@ -325,18 +313,18 @@ async function runAuditRejectionPass(
   const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   const { data: rawDocs } = await supabase
-    .from('compliance_docs')
+    .from('documents')
     .select(`
-      id, doc_name, doc_type, updated_at,
+      id, type, created_at,
       subcontractors (
         id, company_name, contact_email, primary_contact_phone,
         invite_token, organization_id, project_id
       )
     `)
-    .eq('audit_status', 'Flagged')
-    .gte('updated_at', cutoff24h)
+    .eq('status', 'rejected')
+    .gte('created_at', cutoff24h)
 
-  const docs = (rawDocs ?? []) as unknown as FlaggedDocRow[]
+  const docs = (rawDocs ?? []) as unknown as RejectedDocRow[]
 
   const projectIds = [...new Set(
     docs.map((d) => d.subcontractors?.project_id).filter(Boolean) as string[]
@@ -355,13 +343,13 @@ async function runAuditRejectionPass(
     const sub = doc.subcontractors
     if (!sub) continue
 
-    const onCooldown = await isOnCooldown(supabase, sub.id, 'AUDIT_REJECTION')
+    const onCooldown = await isOnCooldown(supabase, sub.id, 'flagged')
     if (onCooldown) { skipped_cooldown++; continue }
 
     const projectName = projectMap[sub.project_id] ?? 'Your Project'
     const link = portalUrl(sub.invite_token)
     const { subject, html } = auditRejectionEmail(
-      sub.company_name, projectName, doc.doc_type, doc.doc_name, link
+      sub.company_name, projectName, doc.type, link
     )
 
     const { error } = await resend.emails.send({
@@ -371,17 +359,17 @@ async function runAuditRejectionPass(
       html,
     })
 
-    const status: NotificationStatus = error ? 'failed' : 'sent'
+    const status = error ? 'failed' : 'sent'
 
-    await recordNotification(supabase, sub.id, sub.organization_id, 'AUDIT_REJECTION', 'EMAIL',
+    await recordNotification(supabase, sub.id, sub.organization_id, 'flagged',
       sub.contact_email, status,
-      { doc_id: doc.id, doc_name: doc.doc_name, doc_type: doc.doc_type, project: projectName }
+      { doc_id: doc.id, doc_type: doc.type, project: projectName }
     )
 
     if (!error) {
       await logToGoldenThread(
-        supabase, sub.id, sub.organization_id, 'AUDIT_REJECTION',
-        `Audit rejection alert sent to ${sub.contact_email} — "${doc.doc_name}" flagged for ${projectName}.`,
+        supabase, sub.id, sub.organization_id,
+        `Audit rejection alert sent to ${sub.contact_email} — ${doc.type} rejected for ${projectName}.`,
       )
       sent++
     }
@@ -405,7 +393,6 @@ export async function runComplianceWatchdog(supabase: DBClient): Promise<Watchdo
   const resend = new Resend(resendKey)
 
   try {
-    // Run both passes; don't let one failure abort the other
     const [expiryWarnings, auditRejections] = await Promise.all([
       runExpiryWarningPass(supabase, resend),
       runAuditRejectionPass(supabase, resend),

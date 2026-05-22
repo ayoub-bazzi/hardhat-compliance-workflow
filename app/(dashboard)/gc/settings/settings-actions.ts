@@ -28,7 +28,7 @@ export async function sendPasswordReset(): Promise<{ success: boolean; error?: s
   if (!user?.email) return { success: false, error: 'Not authenticated.' }
 
   const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/auth/reset-password`,
+    redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/auth/reset-password`,
   })
 
   if (error) return { success: false, error: error.message }

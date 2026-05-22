@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   User, ShieldCheck, Lock, Check, X, Loader2, Mail, KeyRound,
   TerminalSquare, Info, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
+  Languages,
 } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { updateProfile, sendPasswordReset, getSystemLogs } from './settings-actions'
+import { useLanguage } from '@/components/language-provider'
 import type { SystemLog, SystemLogLevel } from '@/types/database.types'
 
 // ── Toggle switch ──────────────────────────────────────────────
@@ -530,6 +532,74 @@ function SecurityTab() {
   )
 }
 
+// ── Tab 4: Language ────────────────────────────────────────────
+
+function LanguageTab() {
+  const { locale, setLocale } = useLanguage()
+  const [saved, setSaved] = useState(false)
+
+  function choose(l: 'en' | 'ar') {
+    setLocale(l)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  return (
+    <div className="space-y-8">
+      <Section
+        title="Display Language"
+        description="Choose the language used across the dashboard. Your preference is saved locally."
+      >
+        <div className="grid grid-cols-2 gap-4 max-w-sm">
+          <button
+            type="button"
+            onClick={() => choose('en')}
+            className={`flex flex-col items-center gap-3 rounded-xl border-2 px-6 py-5 transition-all ${
+              locale === 'en'
+                ? 'border-slate-900 bg-slate-50 shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <span className="text-2xl font-bold tracking-tight text-slate-900">EN</span>
+            <span className="text-sm font-medium text-slate-600">English</span>
+            {locale === 'en' && (
+              <span className="flex items-center gap-1 rounded-full bg-slate-900 px-2 py-0.5 text-[10px] font-semibold text-white">
+                <Check className="h-2.5 w-2.5" /> Active
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => choose('ar')}
+            dir="rtl"
+            className={`flex flex-col items-center gap-3 rounded-xl border-2 px-6 py-5 transition-all ${
+              locale === 'ar'
+                ? 'border-amber-500 bg-amber-50 shadow-sm'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <span className="text-2xl font-bold tracking-tight text-slate-900">ع</span>
+            <span className="text-sm font-medium text-slate-600">العربية</span>
+            {locale === 'ar' && (
+              <span className="flex items-center gap-1 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-semibold text-white">
+                <Check className="h-2.5 w-2.5" /> نشط
+              </span>
+            )}
+          </button>
+        </div>
+
+        {saved && (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 max-w-sm">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            {locale === 'ar' ? 'تم تحديث اللغة' : 'Language updated'}
+          </div>
+        )}
+      </Section>
+    </div>
+  )
+}
+
 // ── Root export ────────────────────────────────────────────────
 
 export function SettingsTabs({
@@ -555,6 +625,9 @@ export function SettingsTabs({
         <TabsTrigger value="security">
           <Lock className="h-4 w-4" /> Security
         </TabsTrigger>
+        <TabsTrigger value="language">
+          <Languages className="h-4 w-4" /> Language
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="profile" className="rounded-xl border border-slate-200 bg-white p-6">
@@ -572,6 +645,10 @@ export function SettingsTabs({
 
       <TabsContent value="security" className="rounded-xl border border-slate-200 bg-white p-6">
         <SecurityTab />
+      </TabsContent>
+
+      <TabsContent value="language" className="rounded-xl border border-slate-200 bg-white p-6">
+        <LanguageTab />
       </TabsContent>
     </Tabs>
   )

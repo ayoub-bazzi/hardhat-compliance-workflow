@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/compliance-watchdog",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/expiry-check",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/compliance/expiry-nudge",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/compliance/hard-stop-check",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/risk-snapshot",
+      "schedule": "0 22 * * *"
+    }
+  ]
+}

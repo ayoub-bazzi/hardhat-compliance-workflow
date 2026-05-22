@@ -51,36 +51,22 @@ export async function checkGateReadiness(
     reasons.push('Safety induction not completed — worker must complete site induction before entry.')
   }
 
-  // Primary: compliance_docs (Insurance Vault)
-  const { data: complianceDocs } = await supabase
-    .from('compliance_docs')
-    .select('doc_name, doc_type, audit_status, expiry_date')
+  // Check current compliance documents only (is_current=true guards against
+  // superseded rejected/expired docs triggering a false denial).
+  const { data: docs } = await supabase
+    .from('documents')
+    .select('type, status, expiry_date')
     .eq('subcontractor_id', subcontractorId)
+    .eq('is_current', true)
 
-  if (complianceDocs && complianceDocs.length > 0) {
-    for (const doc of complianceDocs) {
-      if (doc.audit_status === 'Flagged') {
-        reasons.push(`${doc.doc_type} "${doc.doc_name}" is flagged for review`)
-      } else if (doc.expiry_date && doc.expiry_date < today) {
-        reasons.push(`${doc.doc_type} "${doc.doc_name}" expired ${doc.expiry_date}`)
-      }
-    }
+  if (!docs || docs.length === 0) {
+    reasons.push('No compliance documents on file.')
   } else {
-    // Fallback: legacy documents table
-    const { data: docs } = await supabase
-      .from('documents')
-      .select('type, status, expiry_date')
-      .eq('subcontractor_id', subcontractorId)
-
-    if (!docs || docs.length === 0) {
-      reasons.push('No compliance documents on file.')
-    } else {
-      for (const doc of docs) {
-        if (doc.status === 'rejected') {
-          reasons.push(`${doc.type} document rejected`)
-        } else if (doc.expiry_date && doc.expiry_date < today) {
-          reasons.push(`${doc.type} expired ${doc.expiry_date}`)
-        }
+    for (const doc of docs) {
+      if (doc.status === 'rejected') {
+        reasons.push(`${doc.type} document rejected`)
+      } else if (doc.expiry_date && doc.expiry_date < today) {
+        reasons.push(`${doc.type} expired ${doc.expiry_date}`)
       }
     }
   }

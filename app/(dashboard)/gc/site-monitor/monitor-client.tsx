@@ -5,6 +5,7 @@ import { ShieldCheck, ShieldX, Bell, BellOff, Loader2, AlertTriangle, Camera } f
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { createBrowserClient } from '@/lib/supabase'
+import { getEntryPhotoSignedUrl } from './photo-actions'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -332,7 +333,7 @@ export function SiteMonitorClient({
           table:  'site_access_logs',
           filter: `organization_id=eq.${orgId}`,
         },
-        (payload) => {
+        async (payload) => {
           // Fires when the face-match API writes photo_url / face_match_result back.
           const row = payload.new as {
             id: string
@@ -340,10 +341,15 @@ export function SiteMonitorClient({
             face_match_score: number | null
             face_match_result: string | null
           }
+          // photo_url is now a storage path — resolve it to a signed URL for display.
+          let resolvedPhotoUrl = row.photo_url
+          if (resolvedPhotoUrl && !resolvedPhotoUrl.startsWith('http')) {
+            resolvedPhotoUrl = await getEntryPhotoSignedUrl(resolvedPhotoUrl)
+          }
           setScans((prev) =>
             prev.map((scan) =>
               scan.id === row.id
-                ? { ...scan, photoUrl: row.photo_url, faceMatchScore: row.face_match_score, faceMatchResult: row.face_match_result }
+                ? { ...scan, photoUrl: resolvedPhotoUrl, faceMatchScore: row.face_match_score, faceMatchResult: row.face_match_result }
                 : scan
             )
           )

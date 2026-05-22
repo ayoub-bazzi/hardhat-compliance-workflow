@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
 import { fetchWeatherReport } from '@/lib/weather'
+import { callGeminiWithTimeout } from '@/lib/utils'
 
 export const runtime = 'nodejs'
 
@@ -37,12 +38,12 @@ async function analyzeProgressPhoto(
   attendanceContext: { grantedToday: number; uniqueCompanies: number },
   weatherContext: { label: string; windKmh: number; precipPct: number; hasAlert: boolean },
 ): Promise<GeminiJournalResponse> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: { responseMimeType: 'application/json' },
   })
 
@@ -51,7 +52,7 @@ async function analyzeProgressPhoto(
 
   const weatherLine = `Weather conditions: ${weatherLabel}, wind ${windKmh.toFixed(0)} km/h, ${precipPct.toFixed(0)}% precipitation probability${hasAlert ? ' — WEATHER SAFETY ALERT ACTIVE' : ''}.`
 
-  const result = await model.generateContent([
+  const result = await callGeminiWithTimeout(() => model.generateContent([
     { inlineData: { mimeType, data: base64 } },
     `You are an AI construction site analyst generating a Daily Site Journal entry.
 
@@ -75,7 +76,7 @@ Return ONLY a valid JSON object matching this exact schema:
 }
 
 Set quality to "low" if the photo is blurry, extremely dark, or shows no construction activity. Set to "medium" if partially obstructed or low lighting. Set to "high" if the site is clearly visible with good lighting.`,
-  ])
+  ]))
 
   return safeParseJson(result.response.text())
 }
@@ -150,27 +151,27 @@ export async function POST(request: Request) {
     .from('site-progress-photos')
     .upload(storagePath, buffer, { contentType: 'image/jpeg', upsert: false })
 
-  let photoUrl: string | null = null
-  if (!uploadError) {
-    const { data: urlData } = service.storage
+  // Store the storage path — bucket is private; display uses signed URLs.
+  // Also generate a short-lived signed URL to return to the client for immediate preview.
+  let photoStoragePath: string | null = uploadError ? null : storagePath
+  let photoSignedUrl: string | null = null
+  if (photoStoragePath) {
+    const { data: signed } = await service.storage
       .from('site-progress-photos')
-      .getPublicUrl(storagePath)
-    photoUrl = urlData.publicUrl
+      .createSignedUrl(photoStoragePath, 3600)
+    photoSignedUrl = signed?.signedUrl ?? null
   }
 
   // Insert journal record
   const { data: journal, error: insertError } = await service
     .from('site_journals')
     .insert({
-      id:                  journalId,
-      organization_id:     orgId,
-      project_id:          body.projectId ?? null,
-      photo_url:           photoUrl,
-      work_phase:          gemini.work_phase,
-      photo_quality:       gemini.quality,
-      ai_summary:          gemini.summary,
-      caveats:             gemini.caveats ?? [],
-      attendance_context:  { grantedToday, uniqueCompanies },
+      id:                journalId,
+      organization_id:   orgId,
+      photo_url:         photoStoragePath,
+      ai_summary:        gemini.summary,
+      ai_caveats:        gemini.caveats ?? [],
+      ai_quality_rating: gemini.quality,
     })
     .select()
     .single()
@@ -183,18 +184,17 @@ export async function POST(request: Request) {
   await supabase.rpc('fn_log_audit_event', {
     p_subcontractor_id: null,
     p_organization_id:  orgId,
-    p_event_type:       'Site Journal',
-    p_description:      `Daily site journal created — phase: "${gemini.work_phase}", quality: ${gemini.quality}, ${grantedToday} workers on site.`,
+    p_event_type:       'Audit',
+    p_description:      `Daily site journal created — quality: ${gemini.quality}, ${grantedToday} workers on site.`,
     p_actor:            user.email ?? 'GC User',
     p_metadata:         {
-      journal_id:        journalId,
-      work_phase:        gemini.work_phase,
-      quality:           gemini.quality,
-      caveats_count:     (gemini.caveats ?? []).length,
-      granted_today:     grantedToday,
-      weather_alert:     weatherContext.hasAlert,
+      journal_id:    journalId,
+      quality:       gemini.quality,
+      caveats_count: (gemini.caveats ?? []).length,
+      granted_today: grantedToday,
+      weather_alert: weatherContext.hasAlert,
     },
   })
 
-  return Response.json({ ok: true, journal })
+  return Response.json({ ok: true, journal, photo_signed_url: photoSignedUrl })
 }

@@ -187,7 +187,7 @@ async function CommsTabData() {
   const { data: logsRaw, error } = await supabase
     .from('nudge_logs')
     .select(`
-      id, alert_type, channel, recipient, status, metadata, created_at,
+      id, alert_type, channel, recipient_contact, status, metadata, created_at,
       subcontractors ( company_name )
     `)
     .order('created_at', { ascending: false })
@@ -269,7 +269,7 @@ async function CommsTabData() {
                         log.alert_type === 'expiry_48h'  ? 'bg-orange-50/20' : ''
                       }`}
                     >
-                      <td className="py-3 pl-5 pr-4 text-xs text-slate-500 whitespace-nowrap">{formatTs(log.created_at)}</td>
+                      <td className="py-3 pl-5 pr-4 text-xs text-slate-500 whitespace-nowrap">{log.created_at ? formatTs(log.created_at) : '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">
                         {(log.subcontractors as { company_name: string } | null)?.company_name ?? '—'}
                       </td>
@@ -286,7 +286,7 @@ async function CommsTabData() {
                           <span className="text-xs font-medium capitalize">{log.channel}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-500 font-mono">{log.recipient}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 font-mono">{log.recipient_contact}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <StatusIcon status={log.status as NudgeStatus} />

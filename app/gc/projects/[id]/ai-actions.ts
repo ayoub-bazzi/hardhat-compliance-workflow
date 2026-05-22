@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { Resend } from 'resend'
 import { createClient } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
+import { callGeminiWithTimeout } from '@/lib/utils'
 import type { DocumentType } from '@/types/database.types'
 
 // ── Constants ─────────────────────────────────────────────────
@@ -303,14 +304,13 @@ export async function runAiReview(
       { model: 'gemini-2.5-flash' },
       { apiVersion: 'v1beta' },
     )
-    const result = await model.generateContent([
-      { inlineData: { data: base64, mimeType } },
-      GEMINI_PROMPT,
-    ])
+    const result = await callGeminiWithTimeout(() =>
+      model.generateContent([{ inlineData: { data: base64, mimeType } }, GEMINI_PROMPT])
+    )
     extraction = parseGeminiResponse(result.response.text())
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('429') || msg.includes('503') || /quota|rate.?limit|service.?unavailable|overload/i.test(msg)) {
+    if (msg.includes('429') || msg.includes('503') || msg.includes('timed out') || /quota|rate.?limit|service.?unavailable|overload/i.test(msg)) {
       return { error: 'The Inspector is currently busy. Please try again in 30 seconds.' }
     }
     console.error('[Gemini runAiReview]', msg)
@@ -541,15 +541,14 @@ export async function scanDocumentFile(formData: FormData): Promise<ScanResult> 
       { model: 'gemini-2.5-flash' },
       { apiVersion: 'v1beta' },
     )
-    const result = await model.generateContent([
-      { inlineData: { data: base64, mimeType } },
-      GEMINI_PROMPT,
-    ])
+    const result = await callGeminiWithTimeout(() =>
+      model.generateContent([{ inlineData: { data: base64, mimeType } }, GEMINI_PROMPT])
+    )
     const extraction = parseGeminiResponse(result.response.text())
     return { error: null, ...extraction }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('429') || msg.includes('503') || /quota|rate.?limit|service.?unavailable|overload/i.test(msg)) {
+    if (msg.includes('429') || msg.includes('503') || msg.includes('timed out') || /quota|rate.?limit|service.?unavailable|overload/i.test(msg)) {
       return { error: 'AI Scanner is busy. Please try again in 30 seconds.' }
     }
     console.error('[Gemini scanDocumentFile]', msg)

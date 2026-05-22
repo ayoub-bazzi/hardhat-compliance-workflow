@@ -142,7 +142,7 @@ async function ExecData() {
   const [certsRes, grantedRes, subsRes, auditRes, topSubsRes] = await Promise.all([
     supabase
       .from('payment_certificates')
-      .select('amount_claimed')
+      .select('amount')
       .eq('organization_id', orgId)
       .in('status', ['approved', 'released']),
 
@@ -174,7 +174,7 @@ async function ExecData() {
   ])
 
   // KPI: Total value secured
-  const valueSecured = (certsRes.data ?? []).reduce((s, c) => s + c.amount_claimed, 0)
+  const valueSecured = (certsRes.data ?? []).reduce((s, c) => s + (c.amount ?? 0), 0)
 
   // KPI: Man-hours (each GRANTED entry = 1 worker-day × 8h)
   const manHours = (grantedRes.count ?? 0) * 8

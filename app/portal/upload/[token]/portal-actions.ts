@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import QRCode from 'qrcode'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createServiceSupabaseClient } from '@/lib/supabase'
+import { callGeminiWithTimeout } from '@/lib/utils'
 import { createSitePassToken } from '@/lib/site-pass-token'
 import type { DocumentType, DocumentStatus, SafetyDocType, SafetyApprovalStatus, SafetyRiskLevel } from '@/types/database.types'
 
@@ -149,10 +150,9 @@ async function runGeminiSafetyAudit(file: File): Promise<{
   const arrayBuffer = await file.arrayBuffer()
   const base64Data = Buffer.from(arrayBuffer).toString('base64')
 
-  const geminiResult = await model.generateContent([
-    { inlineData: { mimeType: file.type, data: base64Data } },
-    SAFETY_GEMINI_PROMPT,
-  ])
+  const geminiResult = await callGeminiWithTimeout(() =>
+    model.generateContent([{ inlineData: { mimeType: file.type, data: base64Data } }, SAFETY_GEMINI_PROMPT])
+  )
 
   const stripped = geminiResult.response.text()
     .replace(/^```json\s*/m, '').replace(/^```\s*/m, '').replace(/\n?```\s*$/m, '').trim()
@@ -213,10 +213,9 @@ async function runGeminiAudit(file: File): Promise<{
   const arrayBuffer = await file.arrayBuffer()
   const base64Data = Buffer.from(arrayBuffer).toString('base64')
 
-  const geminiResult = await model.generateContent([
-    { inlineData: { mimeType: file.type, data: base64Data } },
-    GEMINI_PROMPT,
-  ])
+  const geminiResult = await callGeminiWithTimeout(() =>
+    model.generateContent([{ inlineData: { mimeType: file.type, data: base64Data } }, GEMINI_PROMPT])
+  )
 
   const extracted = parseGeminiJson(geminiResult.response.text())
   const flagReasons = buildFlagReasons(extracted, today)

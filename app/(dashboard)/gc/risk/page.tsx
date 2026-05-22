@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase'
 import { getOrgId } from '@/lib/org'
 import { ShieldAlert, ShieldCheck, AlertTriangle, Users, TrendingDown, QrCode } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { RiskScoreBar, RiskLevelBadge } from '@/components/risk-score-bar'
+import { RiskLevelBadge } from '@/components/risk-score-bar'
 
 type RiskLevel = 'critical' | 'elevated' | 'low'
 
@@ -213,17 +213,29 @@ async function RiskData() {
         </div>
 
         {enriched.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center">
-            <TrendingDown className="h-10 w-10 text-slate-300" />
-            <p className="text-sm font-medium text-slate-500">No subcontractors yet</p>
-            <p className="text-xs text-slate-400">Add subs to a project to track risk.</p>
+          <div className="flex flex-col items-center gap-4 py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50">
+              <TrendingDown className="h-7 w-7 text-slate-300" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-700">No subcontractors to track yet</p>
+              <p className="mt-1 text-xs text-slate-400 max-w-xs mx-auto">
+                Add subcontractors to a project and upload their documents — their risk level will appear here automatically.
+              </p>
+            </div>
+            <Link
+              href="/gc/projects"
+              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition-colors"
+            >
+              Go to Dashboard →
+            </Link>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {['Company', 'Project', 'Risk Score', 'Risk Level', 'Expired', 'Rejected', 'Primary Contact', 'Pass'].map((h) => (
+                  {['Company', 'Project', 'Risk Level', 'Pass'].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 first:pl-5 last:pr-5"
@@ -254,32 +266,7 @@ async function RiskData() {
                       {sub.project_name ?? <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3.5">
-                      <RiskScoreBar score={sub.risk_score} />
-                    </td>
-                    <td className="px-4 py-3.5">
                       <RiskLevelBadge level={sub.risk_level} />
-                    </td>
-                    <td className="px-4 py-3.5 tabular-nums">
-                      {sub.expired_doc_count > 0
-                        ? <span className="font-semibold text-red-600">{sub.expired_doc_count}</span>
-                        : <span className="text-slate-400">0</span>}
-                    </td>
-                    <td className="px-4 py-3.5 tabular-nums">
-                      {sub.rejected_doc_count > 0
-                        ? <span className="font-semibold text-amber-600">{sub.rejected_doc_count}</span>
-                        : <span className="text-slate-400">0</span>}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {sub.primary_contact_name ? (
-                        <div>
-                          <p className="text-slate-700">{sub.primary_contact_name}</p>
-                          {sub.primary_contact_phone && (
-                            <p className="text-xs text-slate-400">{sub.primary_contact_phone}</p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-slate-400">Not set</span>
-                      )}
                     </td>
                     <td className="px-4 py-3.5 pr-5">
                       <Link

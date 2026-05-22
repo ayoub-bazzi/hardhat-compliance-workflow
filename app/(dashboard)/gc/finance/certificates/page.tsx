@@ -1,7 +1,7 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import {
-  Landmark, ShieldCheck, Lock, CheckCircle2, Clock, AlertTriangle,
+  Landmark, ShieldCheck, Lock, Clock, CheckCircle2,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase'
@@ -40,7 +40,7 @@ async function CertificatesData() {
 
   const totalEscrowedAmt = certs
     .filter((c) => c.status === 'escrowed')
-    .reduce((s, c) => s + c.amount_claimed, 0)
+    .reduce((s, c) => s + (c.amount ?? 0), 0)
 
   return (
     <div className="space-y-6">
@@ -100,7 +100,7 @@ async function CertificatesData() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  {['Certificate', 'Subcontractor', 'Period', 'Amount', 'Risk', 'Status', 'Discrepancy', 'Action'].map((h) => (
+                  {['Certificate', 'Subcontractor', 'Period', 'Amount', 'Risk', 'Status', 'Action'].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 first:pl-5 last:pr-5">
                       {h}
                     </th>
@@ -121,11 +121,11 @@ async function CertificatesData() {
                         cert.status === 'released' ? 'bg-emerald-50/20' : ''
                       }`}
                     >
-                      {/* Certificate # */}
+                      {/* Certificate */}
                       <td className="py-3.5 pl-5 pr-4">
-                        <p className="font-mono text-xs font-semibold text-slate-700">{cert.certificate_number}</p>
+                        <p className="font-mono text-xs font-semibold text-slate-700">CERT-{cert.id.slice(0, 8).toUpperCase()}</p>
                         <p className="text-[10px] text-slate-400">
-                          {new Date(cert.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {cert.created_at ? new Date(cert.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </p>
                       </td>
 
@@ -143,21 +143,16 @@ async function CertificatesData() {
 
                       {/* Period */}
                       <td className="px-4 py-3.5 text-xs text-slate-500">
-                        <span className="font-mono">{cert.period_from}</span>
+                        <span className="font-mono">{cert.period_start}</span>
                         <span className="mx-1 text-slate-300">→</span>
-                        <span className="font-mono">{cert.period_to}</span>
+                        <span className="font-mono">{cert.period_end}</span>
                       </td>
 
                       {/* Amount */}
                       <td className="px-4 py-3.5">
                         <p className="font-semibold text-slate-800 tabular-nums">
-                          {cert.amount_claimed.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                          {(cert.amount ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                         </p>
-                        {cert.invoice_amount_ai && (
-                          <p className="text-[10px] text-slate-400">
-                            AI: {cert.invoice_amount_ai.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
-                          </p>
-                        )}
                       </td>
 
                       {/* Risk score */}
@@ -178,28 +173,12 @@ async function CertificatesData() {
                         <CertificateStatusBadge status={cert.status} />
                       </td>
 
-                      {/* Discrepancy */}
-                      <td className="px-4 py-3.5">
-                        {cert.discrepancy_flagged ? (
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            {cert.discrepancy_pct?.toFixed(1)}% off
-                          </div>
-                        ) : (
-                          cert.invoice_url
-                            ? <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" /> Verified</span>
-                            : <span className="text-xs text-slate-400">No invoice</span>
-                        )}
-                      </td>
-
                       {/* Actions */}
                       <td className="px-4 py-3.5 pr-5">
                         <CertificateRowActions
                           certId={cert.id}
                           status={cert.status}
                           riskScore={riskScore}
-                          holdReason={cert.hold_reason}
-                          discrepancyFlagged={cert.discrepancy_flagged}
                         />
                       </td>
                     </tr>

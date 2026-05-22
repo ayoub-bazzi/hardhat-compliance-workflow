@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createServiceSupabaseClient } from '@/lib/supabase'
 import { sendImpersonationAlert } from '@/lib/push-notification'
+import { callGeminiWithTimeout } from '@/lib/utils'
 import type { FaceMatchResult } from '@/types/database.types'
 
 export const runtime = 'nodejs'
@@ -40,14 +41,14 @@ async function runFaceMatch(
   profileMime:    string,
   entryBase64:    string,
 ): Promise<GeminiFaceResponse> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } },
+    { apiVersion: 'v1beta' },
+  )
 
   const prompt = `You are a security identity verification system for construction site access control.
 
@@ -71,11 +72,13 @@ Guidelines:
 - Poor lighting, dust, or obscured face: confidence below 50
 - Be conservative — it is better to flag a mismatch than to miss one`
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType: profileMime, data: profileBase64 } },
-    { inlineData: { mimeType: 'image/jpeg',  data: entryBase64  } },
-    prompt,
-  ])
+  const result = await callGeminiWithTimeout(() =>
+    model.generateContent([
+      { inlineData: { mimeType: profileMime, data: profileBase64 } },
+      { inlineData: { mimeType: 'image/jpeg', data: entryBase64 } },
+      prompt,
+    ])
+  )
 
   return extractJson(result.response.text())
 }
@@ -133,11 +136,8 @@ export async function POST(request: Request) {
     return Response.json({ error: `Storage upload failed: ${uploadError.message}` }, { status: 502 })
   }
 
-  const { data: publicUrlData } = service.storage
-    .from('site-entry-photos')
-    .getPublicUrl(storagePath)
-
-  const photoUrl = publicUrlData.publicUrl
+  // Store the storage path — bucket is private; display components use signed URLs.
+  const photoUrl = storagePath
 
   // ── Fetch profile photo ───────────────────────────────────────────────────
   const { data: sub } = await service
@@ -152,13 +152,25 @@ export async function POST(request: Request) {
 
   if (sub?.profile_photo_url) {
     try {
-      // Fetch profile photo bytes
-      const profileRes = await fetch(sub.profile_photo_url)
-      if (!profileRes.ok) throw new Error('Profile photo fetch failed')
+      // Download profile photo via service client — bucket is private.
+      // Legacy rows may still store a full public URL (http…); handle both.
+      let profileBuffer: Buffer
+      let contentType = 'image/jpeg'
 
-      const profileBuffer = Buffer.from(await profileRes.arrayBuffer())
+      if (sub.profile_photo_url.startsWith('http')) {
+        const res = await fetch(sub.profile_photo_url)
+        if (!res.ok) throw new Error('Profile photo fetch failed')
+        profileBuffer = Buffer.from(await res.arrayBuffer())
+        contentType   = res.headers.get('content-type') ?? 'image/jpeg'
+      } else {
+        const { data: blob, error: dlErr } = await service.storage
+          .from('profile-photos')
+          .download(sub.profile_photo_url)
+        if (dlErr || !blob) throw new Error('Profile photo download failed')
+        profileBuffer = Buffer.from(await blob.arrayBuffer())
+      }
+
       const profileBase64 = profileBuffer.toString('base64')
-      const contentType   = profileRes.headers.get('content-type') ?? 'image/jpeg'
 
       const geminiResult = await runFaceMatch(profileBase64, contentType, entryBase64)
       faceMatchScore  = geminiResult.confidence

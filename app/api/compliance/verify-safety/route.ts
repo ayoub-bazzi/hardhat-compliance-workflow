@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
+import { callGeminiWithTimeout } from '@/lib/utils'
 import type { SafetyApprovalStatus, SafetyRiskLevel } from '@/types/database.types'
 
 export const runtime = 'nodejs'
@@ -47,19 +48,18 @@ async function runGeminiSafetyAnalysis(
   base64Data: string,
   mimeType: string,
 ): Promise<SafetyExtracted> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } },
+    { apiVersion: 'v1beta' },
+  )
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType, data: base64Data } },
-    SAFETY_PROMPT,
-  ])
+  const result = await callGeminiWithTimeout(() =>
+    model.generateContent([{ inlineData: { mimeType, data: base64Data } }, SAFETY_PROMPT])
+  )
 
   return parseSafetyJson(result.response.text())
 }

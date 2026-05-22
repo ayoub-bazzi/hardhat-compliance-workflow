@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Users, HardHat } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
+import { createServiceSupabaseClient } from '@/lib/supabase'
 import { getOrgId } from '@/lib/org'
 import type { LastSeenWorker } from '@/types/database.types'
 
@@ -28,7 +29,21 @@ export async function LastSeenWorkers({ limit = 5 }: { limit?: number }) {
         .limit(limit)
     : { data: null }
 
-  const workers = (data ?? []) as LastSeenWorker[]
+  const rawWorkers = (data ?? []) as LastSeenWorker[]
+
+  // Resolve storage paths to short-lived signed URLs (profile-photos bucket is private).
+  const service = createServiceSupabaseClient()
+  const workers = await Promise.all(
+    rawWorkers.map(async (w) => {
+      if (!w.profile_photo_url || w.profile_photo_url.startsWith('http')) {
+        return w
+      }
+      const { data: signed } = await service.storage
+        .from('profile-photos')
+        .createSignedUrl(w.profile_photo_url, 3600)
+      return { ...w, profile_photo_url: signed?.signedUrl ?? null }
+    }),
+  )
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">

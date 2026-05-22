@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react'
 import {
   LayoutDashboard,
   ShieldAlert,
-  Vault,
   ScanLine,
   ScrollText,
   Settings,
@@ -25,6 +24,9 @@ import {
   PieChart,
   PanelLeftClose,
   PanelLeftOpen,
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
 } from 'lucide-react'
 import { NotificationBell } from '@/components/notification-bell'
 import { Button } from '@/components/ui/button'
@@ -42,39 +44,31 @@ import type { NavDict } from '@/lib/i18n'
 // ── Nav config ─────────────────────────────────────────────────────
 
 type NavLink = { href: string; labelKey: keyof NavDict; icon: React.ElementType; allowedRoles?: AppRole[] }
-type NavSection = { headingKey: keyof NavDict; links: NavLink[] }
+type NavSection = { headingKey?: keyof NavDict; links: NavLink[] }
 
-const gcNavSections: NavSection[] = [
+const gcPrimaryNavSections: NavSection[] = [
   {
-    headingKey: 'mission_control',
     links: [
-      { href: '/gc/projects',   labelKey: 'command_center', icon: LayoutDashboard },
-      { href: '/gc/executive',  labelKey: 'executive',      icon: PieChart, allowedRoles: ['admin'] },
+      { href: '/gc/projects', labelKey: 'dashboard',  icon: LayoutDashboard },
+      { href: '/gc/risk',     labelKey: 'compliance', icon: ShieldAlert },
+      { href: '/gc/scan',     labelKey: 'site_gate',  icon: ScanLine },
+      { href: '/gc/finance',  labelKey: 'payments',   icon: Landmark, allowedRoles: ['admin', 'finance'] },
+      { href: '/gc/settings', labelKey: 'settings',   icon: Settings },
     ],
   },
-  {
-    headingKey: 'service_hubs',
-    links: [
-      { href: '/gc/risk',         labelKey: 'risk_overview',   icon: ShieldAlert },
-      { href: '/gc/insurance',    labelKey: 'insurance_vault', icon: Vault },
-      { href: '/gc/scan',         labelKey: 'site_gate',       icon: ScanLine },
-      { href: '/gc/site-monitor', labelKey: 'site_monitor',    icon: MonitorDot },
-      { href: '/gc/audit',        labelKey: 'audit_trails',    icon: ScrollText },
-      { href: '/gc/leaderboard',  labelKey: 'leaderboard',     icon: Trophy },
-      { href: '/gc/attendance',   labelKey: 'attendance',      icon: CalendarDays },
-      { href: '/gc/reports',      labelKey: 'reports',         icon: BarChart3 },
-      { href: '/gc/journal',      labelKey: 'journal',         icon: BookOpen },
-      { href: '/gc/labor',        labelKey: 'labor',           icon: TrendingUp },
-      { href: '/gc/finance',      labelKey: 'finance_hub',     icon: Landmark, allowedRoles: ['admin', 'finance'] },
-    ],
-  },
-  {
-    headingKey: 'system',
-    links: [
-      { href: '/gc/settings',      labelKey: 'settings', icon: Settings },
-      { href: '/gc/settings/team', labelKey: 'team',     icon: Users, allowedRoles: ['admin'] },
-    ],
-  },
+]
+
+const gcMoreLinks: NavLink[] = [
+  { href: '/gc/executive',     labelKey: 'executive',      icon: PieChart,     allowedRoles: ['admin'] },
+  { href: '/gc/documents',     labelKey: 'document_vault', icon: FileText },
+  { href: '/gc/site-monitor',  labelKey: 'site_monitor',   icon: MonitorDot },
+  { href: '/gc/reports',       labelKey: 'reports',        icon: BarChart3 },
+  { href: '/gc/audit',         labelKey: 'audit_trails',   icon: ScrollText },
+  { href: '/gc/leaderboard',   labelKey: 'leaderboard',    icon: Trophy },
+  { href: '/gc/attendance',    labelKey: 'attendance',     icon: CalendarDays },
+  { href: '/gc/labor',         labelKey: 'labor',          icon: TrendingUp },
+  { href: '/gc/journal',       labelKey: 'journal',        icon: BookOpen },
+  { href: '/gc/settings/team', labelKey: 'team',           icon: Users, allowedRoles: ['admin'] },
 ]
 
 const subNavSections: NavSection[] = [
@@ -129,6 +123,90 @@ function NavItem({
           : <span className="ms-auto h-2 w-2 rounded-full bg-red-500 ring-2 ring-slate-900" />
       )}
     </Link>
+  )
+}
+
+function MoreSection({
+  links,
+  appRole,
+  onNavClick,
+  collapsed,
+}: {
+  links: NavLink[]
+  appRole: AppRole | null
+  onNavClick?: () => void
+  collapsed: boolean
+}) {
+  const { t } = useLanguage()
+  const pathname = usePathname()
+  const visibleLinks = links.filter(
+    (link) => !link.allowedRoles || (appRole != null && link.allowedRoles.includes(appRole)),
+  )
+  const isMoreActive = visibleLinks.some(
+    (l) => pathname === l.href || pathname.startsWith(l.href + '/'),
+  )
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const stored = localStorage.getItem('hc-sidebar-more-open')
+    if (stored === 'true' || isMoreActive) setOpen(true)
+  }, [isMoreActive])
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev
+      localStorage.setItem('hc-sidebar-more-open', String(next))
+      return next
+    })
+  }
+
+  // In icon-only mode show all items directly — no toggle needed
+  if (collapsed) {
+    return (
+      <div className="space-y-0.5">
+        {visibleLinks.map((link) => (
+          <NavItem
+            key={link.href}
+            href={link.href}
+            label={t.nav[link.labelKey]}
+            icon={link.icon}
+            onClick={onNavClick}
+            collapsed={collapsed}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <button
+        onClick={toggle}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+      >
+        <MoreHorizontal className="h-4 w-4 shrink-0" />
+        {t.nav.more}
+        {open ? (
+          <ChevronUp className="ms-auto h-4 w-4 shrink-0" />
+        ) : (
+          <ChevronDown className="ms-auto h-4 w-4 shrink-0" />
+        )}
+      </button>
+      {open && (
+        <div className="mt-0.5 space-y-0.5">
+          {visibleLinks.map((link) => (
+            <NavItem
+              key={link.href}
+              href={link.href}
+              label={t.nav[link.labelKey]}
+              icon={link.icon}
+              onClick={onNavClick}
+              collapsed={false}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -197,7 +275,6 @@ function SidebarContent({
   onToggle?: () => void
 }) {
   const { t } = useLanguage()
-  const sections = role === 'subcontractor' ? subNavSections : gcNavSections
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount)
 
   useEffect(() => {
@@ -213,6 +290,35 @@ function SidebarContent({
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [role])
+
+  function renderSection(section: NavSection) {
+    const filteredLinks = section.links.filter(
+      (link) => !link.allowedRoles || (appRole != null && link.allowedRoles.includes(appRole)),
+    )
+    if (filteredLinks.length === 0) return null
+    return (
+      <div key={section.headingKey ?? 'main'}>
+        {!collapsed && section.headingKey && (
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+            {t.nav[section.headingKey]}
+          </p>
+        )}
+        <div className="space-y-0.5">
+          {filteredLinks.map((link) => (
+            <NavItem
+              key={link.href}
+              href={link.href}
+              label={t.nav[link.labelKey]}
+              icon={link.icon}
+              onClick={onNavClick}
+              badge={role === 'gc' && unreadCount > 0 && link.href === '/gc/projects'}
+              collapsed={collapsed}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -241,30 +347,19 @@ function SidebarContent({
 
       {/* Nav */}
       <nav className="sidebar-nav flex-1 space-y-4 overflow-y-auto px-3 py-4">
-        {sections.map((section) => (
-          <div key={section.headingKey}>
-            {!collapsed && (
-              <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-                {t.nav[section.headingKey]}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {section.links
-                .filter((link) => !link.allowedRoles || (appRole != null && link.allowedRoles.includes(appRole)))
-                .map((link) => (
-                  <NavItem
-                    key={link.href}
-                    href={link.href}
-                    label={t.nav[link.labelKey]}
-                    icon={link.icon}
-                    onClick={onNavClick}
-                    badge={role === 'gc' && unreadCount > 0 && link.href === '/gc/projects'}
-                    collapsed={collapsed}
-                  />
-                ))}
-            </div>
-          </div>
-        ))}
+        {role === 'subcontractor' ? (
+          subNavSections.map((section) => renderSection(section))
+        ) : (
+          <>
+            {gcPrimaryNavSections.map((section) => renderSection(section))}
+            <MoreSection
+              links={gcMoreLinks}
+              appRole={appRole}
+              onNavClick={onNavClick}
+              collapsed={collapsed}
+            />
+          </>
+        )}
       </nav>
 
       {/* Footer */}

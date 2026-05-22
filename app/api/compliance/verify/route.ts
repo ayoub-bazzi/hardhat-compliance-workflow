@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient } from '@/lib/supabase'
 import { createServiceSupabaseClient } from '@/lib/supabase'
 import { sendFlaggedAlert } from '@/lib/notifications'
+import { callGeminiWithTimeout } from '@/lib/utils'
 import type { AuditStatus } from '@/types/database.types'
 
 export const runtime = 'nodejs'
@@ -30,14 +31,14 @@ async function runGeminiExtraction(
   base64Data: string,
   mimeType: string,
 ): Promise<ExtractedFields> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY is not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } },
+    { apiVersion: 'v1beta' },
+  )
 
   const prompt = `You are an insurance document analyst.
 Analyse this document and extract the following fields exactly.
@@ -56,10 +57,9 @@ Important:
 - liability_limit_usd must be the GENERAL AGGREGATE limit in USD as a plain integer (e.g. 1000000)
 - If a field cannot be determined, use null`
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType, data: base64Data } },
-    prompt,
-  ])
+  const result = await callGeminiWithTimeout(() =>
+    model.generateContent([{ inlineData: { mimeType, data: base64Data } }, prompt])
+  )
 
   return extractJson(result.response.text())
 }

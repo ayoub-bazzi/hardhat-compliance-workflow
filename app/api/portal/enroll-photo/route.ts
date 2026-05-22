@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
+import { callGeminiWithTimeout } from '@/lib/utils'
 
 export const runtime = 'nodejs'
 
@@ -29,18 +30,19 @@ function extractJson(raw: string): GeminiQualityResponse {
 }
 
 async function validatePhotoQuality(base64: string, mimeType: string): Promise<GeminiQualityResponse> {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set')
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_GENERATIVE_AI_API_KEY not set')
 
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    generationConfig: { responseMimeType: 'application/json' },
-  })
+  const model = genAI.getGenerativeModel(
+    { model: 'gemini-2.5-flash', generationConfig: { responseMimeType: 'application/json' } },
+    { apiVersion: 'v1beta' },
+  )
 
-  const result = await model.generateContent([
-    { inlineData: { mimeType, data: base64 } },
-    `You are validating a worker identity photo for a construction site access pass.
+  const result = await callGeminiWithTimeout(() =>
+    model.generateContent([
+      { inlineData: { mimeType, data: base64 } },
+      `You are validating a worker identity photo for a construction site access pass.
 
 Assess the photo for:
 1. Is a human face clearly and fully visible? (not obscured, not a cartoon, not an object)
@@ -52,7 +54,8 @@ Return ONLY a valid JSON object:
   "lighting_sufficient": true or false,
   "feedback": "A short, friendly message explaining any issues. Empty string if the photo is good."
 }`,
-  ])
+    ])
+  )
 
   return extractJson(result.response.text())
 }
@@ -117,18 +120,12 @@ export async function POST(request: Request) {
     return Response.json({ error: `Upload failed: ${uploadError.message}` }, { status: 502 })
   }
 
-  const { data: urlData } = service.storage
-    .from('profile-photos')
-    .getPublicUrl(storagePath)
-
-  // Append cache-busting timestamp so face-match fetches always get the latest version
-  const photoUrl = `${urlData.publicUrl}?t=${Date.now()}`
-
-  // Update all subcontractor records for this user — one photo across all projects
+  // Store the storage path (not a public URL) — the bucket is private.
+  // Display components generate short-lived signed URLs on the fly.
   const subIds = subs.map((s) => s.id)
   await service
     .from('subcontractors')
-    .update({ profile_photo_url: photoUrl })
+    .update({ profile_photo_url: storagePath })
     .in('id', subIds)
 
   return Response.json({ ok: true })

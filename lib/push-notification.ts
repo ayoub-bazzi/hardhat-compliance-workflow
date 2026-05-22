@@ -73,7 +73,7 @@ async function sendPushToOrg(
   const service = createServiceSupabaseClient()
   const { data: subs } = await service
     .from('push_subscriptions')
-    .select('endpoint, p256dh, auth')
+    .select('subscription_json')
     .eq('organization_id', orgId)
 
   if (!subs || subs.length === 0) return
@@ -84,12 +84,10 @@ async function sendPushToOrg(
   webpush.setVapidDetails(`mailto:${vapidContact}`, vapidPublicKey, vapidPrivateKey)
 
   await Promise.allSettled(
-    subs.map((sub) =>
-      webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-        payload,
-      )
-    )
+    subs.map((sub) => {
+      const s = sub.subscription_json as { endpoint: string; keys: { p256dh: string; auth: string } }
+      return webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.keys.p256dh, auth: s.keys.auth } }, payload)
+    })
   )
 }
 

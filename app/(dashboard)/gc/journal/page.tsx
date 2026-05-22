@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import Image from 'next/image'
 import { BookOpen, AlertTriangle } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
-import { createClient } from '@/lib/supabase'
+import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
 import { JournalUpload } from './journal-upload'
 import type { SiteJournal } from '@/types/database.types'
 
@@ -21,7 +21,19 @@ async function JournalFeed() {
     .order('created_at', { ascending: false })
     .limit(20)
 
-  const journals = (data ?? []) as SiteJournal[]
+  const rawJournals = (data ?? []) as SiteJournal[]
+
+  // Resolve storage paths to signed URLs (site-progress-photos bucket is private).
+  const service = createServiceSupabaseClient()
+  const journals = await Promise.all(
+    rawJournals.map(async (j) => {
+      if (!j.photo_url || j.photo_url.startsWith('http')) return j
+      const { data: signed } = await service.storage
+        .from('site-progress-photos')
+        .createSignedUrl(j.photo_url, 3600)
+      return { ...j, photo_url: signed?.signedUrl ?? null }
+    }),
+  )
 
   if (journals.length === 0) {
     return (
@@ -36,9 +48,8 @@ async function JournalFeed() {
   return (
     <div className="space-y-4">
       {journals.map((j) => {
-        const paragraphs   = j.ai_summary.split('\n\n').filter(Boolean)
-        const badgeCls     = QUALITY_BADGE[j.photo_quality] ?? QUALITY_BADGE.medium
-        const ctx          = j.attendance_context as Record<string, unknown>
+        const paragraphs = (j.ai_summary ?? '').split('\n\n').filter(Boolean)
+        const badgeCls   = QUALITY_BADGE[j.ai_quality_rating ?? ''] ?? QUALITY_BADGE.medium
 
         return (
           <div key={j.id} className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -64,32 +75,16 @@ async function JournalFeed() {
               <div className="sm:col-span-3 p-5 space-y-3">
                 {/* Meta row */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {j.work_phase && (
-                    <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
-                      {j.work_phase}
-                    </span>
-                  )}
                   <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${badgeCls}`}>
-                    {j.photo_quality.charAt(0).toUpperCase() + j.photo_quality.slice(1)} Quality
+                    {j.ai_quality_rating ? j.ai_quality_rating.charAt(0).toUpperCase() + j.ai_quality_rating.slice(1) + ' Quality' : 'Quality unrated'}
                   </span>
                   <span className="ml-auto text-xs text-slate-400">
-                    {new Date(j.created_at).toLocaleDateString('en-US', {
+                    {j.created_at ? new Date(j.created_at).toLocaleDateString('en-US', {
                       weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-                    })}
-                    {' '}
-                    {new Date(j.created_at).toLocaleTimeString('en-US', {
-                      hour: '2-digit', minute: '2-digit',
-                    })}
+                    }) : '—'}
+                    {j.created_at ? (' ' + new Date(j.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })) : ''}
                   </span>
                 </div>
-
-                {/* Attendance context */}
-                {ctx && (
-                  <p className="text-xs text-slate-500">
-                    <span className="font-semibold text-slate-700">{String(ctx.grantedToday ?? 0)}</span> worker entries ·{' '}
-                    <span className="font-semibold text-slate-700">{String(ctx.uniqueCompanies ?? 0)}</span> compan{Number(ctx.uniqueCompanies) === 1 ? 'y' : 'ies'} on site
-                  </p>
-                )}
 
                 {/* Summary (first paragraph only in feed) */}
                 <p className="text-sm text-slate-700 leading-relaxed">
@@ -97,9 +92,9 @@ async function JournalFeed() {
                 </p>
 
                 {/* Caveats */}
-                {j.caveats && j.caveats.length > 0 && (
+                {j.ai_caveats && (j.ai_caveats as string[]).length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {j.caveats.map((c, i) => (
+                    {(j.ai_caveats as string[]).map((c, i) => (
                       <span
                         key={i}
                         className="flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-800"

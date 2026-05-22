@@ -15,7 +15,7 @@ type InvoiceCheckResult = {
   notes?:              string
   discrepancy_flagged?: boolean
   discrepancy_pct?:    number | null
-  amount_claimed?:     number
+  amount?:             number
   error?:              string
 }
 
@@ -148,7 +148,7 @@ export function InvoiceUpload({ certId, amountClaimed }: { certId: string; amoun
                         result.discrepancy_flagged ? 'text-amber-800' : 'text-emerald-800'
                       }`}>
                         Invoice total: {result.invoice_total.toLocaleString('en-US', { style: 'currency', currency: result.currency ?? 'USD', maximumFractionDigits: 0 })}
-                        {' '}vs certificate: {result.amount_claimed?.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                        {' '}vs certificate: {result.amount?.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                       </p>
                     )}
                     {result.invoice_number && (

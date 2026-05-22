@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
 import { SiteMonitorClient } from './monitor-client'
 
 export default async function SiteMonitorPage() {
@@ -37,19 +37,32 @@ export default async function SiteMonitorPage() {
     subMap[s.id] = { name: s.company_name, riskScore: s.risk_score ?? 0 }
   }
 
-  const scans = (recentScans ?? []).map((s) => ({
-    id:              s.id,
-    subId:           s.subcontractor_id,
-    companyName:     subMap[s.subcontractor_id]?.name ?? 'Unknown Sub',
-    riskScore:       subMap[s.subcontractor_id]?.riskScore ?? 0,
-    result:          s.result as 'GRANTED' | 'DENIED',
-    reasons:         (s.denial_reasons as string[] | null) ?? [],
-    gateLocation:    s.gate_location ?? 'QR Gate',
-    scannedAt:       s.created_at,
-    photoUrl:        s.photo_url ?? null,
-    faceMatchScore:  s.face_match_score ?? null,
-    faceMatchResult: s.face_match_result ?? null,
-  }))
+  // Resolve storage paths to signed URLs (site-entry-photos bucket is private).
+  const service = createServiceSupabaseClient()
+  const scans = await Promise.all(
+    (recentScans ?? []).map(async (s) => {
+      let photoUrl: string | null = s.photo_url ?? null
+      if (photoUrl && !photoUrl.startsWith('http')) {
+        const { data: signed } = await service.storage
+          .from('site-entry-photos')
+          .createSignedUrl(photoUrl, 3600)
+        photoUrl = signed?.signedUrl ?? null
+      }
+      return {
+        id:              s.id,
+        subId:           s.subcontractor_id,
+        companyName:     subMap[s.subcontractor_id]?.name ?? 'Unknown Sub',
+        riskScore:       subMap[s.subcontractor_id]?.riskScore ?? 0,
+        result:          s.result as 'GRANTED' | 'DENIED',
+        reasons:         (s.denial_reasons as string[] | null) ?? [],
+        gateLocation:    s.gate_location ?? 'QR Gate',
+        scannedAt:       s.created_at,
+        photoUrl,
+        faceMatchScore:  s.face_match_score ?? null,
+        faceMatchResult: s.face_match_result ?? null,
+      }
+    }),
+  )
 
   return (
     <div className="space-y-6">

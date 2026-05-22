@@ -1,6 +1,10 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 
-const SECRET = process.env.SITE_PASS_SECRET ?? 'dev-insecure-fallback-change-in-production'
+const SECRET = process.env.SITE_PASS_SECRET
+if (!SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('SITE_PASS_SECRET must be set in production — gate pass tokens cannot be signed securely without it.')
+}
+const SIGNING_SECRET = SECRET ?? 'dev-insecure-fallback-do-not-use-in-production'
 const TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 export type SitePassPayload = {
@@ -26,7 +30,7 @@ export function createSitePassToken(subcontractorId: string, orgId: string): str
     iat: Date.now(),
   }
   const encodedPayload = b64uEncode(JSON.stringify(payload))
-  const sig = createHmac('sha256', SECRET).update(encodedPayload).digest('base64url')
+  const sig = createHmac('sha256', SIGNING_SECRET).update(encodedPayload).digest('base64url')
   return `${encodedPayload}.${sig}`
 }
 
@@ -37,7 +41,7 @@ export function verifySitePassToken(token: string): SitePassPayload | null {
   const encodedPayload = token.slice(0, dotIdx)
   const sig = token.slice(dotIdx + 1)
 
-  const expectedSig = createHmac('sha256', SECRET).update(encodedPayload).digest('base64url')
+  const expectedSig = createHmac('sha256', SIGNING_SECRET).update(encodedPayload).digest('base64url')
 
   try {
     const sigBuf = Buffer.from(sig, 'base64url')

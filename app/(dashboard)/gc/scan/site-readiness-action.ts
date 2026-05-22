@@ -25,7 +25,7 @@ export async function calculateSiteReadiness(
 
   const { data: sub } = await supabase
     .from('subcontractors')
-    .select('company_name, compliance_status')
+    .select('company_name, compliance_status, organization_id')
     .eq('id', subcontractorId)
     .single()
 
@@ -39,53 +39,36 @@ export async function calculateSiteReadiness(
 
   const reasons: string[] = []
 
-  // Primary source: compliance_docs (Insurance Vault)
-  const { data: complianceDocs } = await supabase
-    .from('compliance_docs')
-    .select('doc_name, doc_type, audit_status, expiry_date')
+  // Check current documents only — is_current=true guards against superseded
+  // rejected/expired docs causing false denials after a new version was approved.
+  const { data: docs } = await supabase
+    .from('documents')
+    .select('type, status, expiry_date')
     .eq('subcontractor_id', subcontractorId)
+    .eq('is_current', true)
 
-  if (complianceDocs && complianceDocs.length > 0) {
-    for (const doc of complianceDocs) {
-      if (doc.audit_status === 'Flagged') {
-        reasons.push(`${doc.doc_type} "${doc.doc_name}" is flagged for review`)
-      } else if (doc.expiry_date && doc.expiry_date < today) {
-        reasons.push(`${doc.doc_type} "${doc.doc_name}" expired ${doc.expiry_date}`)
-      }
-    }
+  if (!docs || docs.length === 0) {
+    reasons.push('No compliance documents on file — access blocked until documents are uploaded and verified.')
   } else {
-    // Fallback: legacy documents table
-    const { data: docs } = await supabase
-      .from('documents')
-      .select('type, status, expiry_date')
-      .eq('subcontractor_id', subcontractorId)
-
-    if (!docs || docs.length === 0) {
-      reasons.push('No compliance documents on file — access blocked until documents are uploaded and verified.')
-    } else {
-      for (const doc of docs) {
-        if (doc.status === 'rejected') {
-          reasons.push(`${doc.type} document is rejected`)
-        } else if (doc.expiry_date && doc.expiry_date < today) {
-          reasons.push(`${doc.type} expired ${doc.expiry_date}`)
-        }
+    for (const doc of docs) {
+      if (doc.status === 'rejected') {
+        reasons.push(`${doc.type} document is rejected`)
+      } else if (doc.expiry_date && doc.expiry_date < today) {
+        reasons.push(`${doc.type} expired ${doc.expiry_date}`)
       }
     }
   }
 
   const status: AccessResult = reasons.length === 0 ? 'GRANTED' : 'DENIED'
 
-  // Get current user for the log
-  const { data: { user } } = await supabase.auth.getUser()
-
   // Append to immutable audit log — fire and forget, non-blocking
   supabase.from('site_access_logs').insert({
     subcontractor_id: subcontractorId,
-    result: status,
-    denial_reasons: reasons.length > 0 ? reasons : null,
-    scanned_by: user?.id ?? null,
-    gate_location: gateLocation ?? null,
-    qr_payload: qrPayload ?? null,
+    organization_id:  sub.organization_id ?? undefined,
+    result:           status,
+    denial_reasons:   reasons.length > 0 ? reasons : null,
+    gate_location:    gateLocation ?? null,
+    qr_payload:       qrPayload ?? null,
   }).then(() => {})
 
   return { status, subcontractorName: sub.company_name, reasons }

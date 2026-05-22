@@ -284,7 +284,9 @@ in_app_notifications, prequal_submissions, nudge_logs, gc_notifications, audit_e
 | Trigger | Table | Timing | Purpose |
 |---|---|---|---|
 | `tr_documents_set_org_id` | documents | BEFORE INSERT | Auto-populates organization_id from parent subcontractor |
-| `trg_compliance_risk` | compliance_docs | AFTER INSERT/UPDATE | Invokes risk score engine — fires on the decoupled table (0 rows) |
+| `trg_sync_risk_ins_del` | documents | AFTER INSERT/DELETE | Recalculates risk_score on subcontractors when a doc is added or removed |
+| `trg_sync_risk_upd` | documents | AFTER UPDATE OF status/expiry_date/is_current | Recalculates risk_score only when risk-relevant columns change (skips last_notified_at etc.) |
+| `trg_compliance_risk` | compliance_docs | AFTER INSERT/UPDATE | Legacy — still exists but fires on dead table (0 rows), effectively inert |
 | `trg_payment_gate` | subcontractors | BEFORE UPDATE | Sets payment_status based on risk_score thresholds |
 | `trg_auto_payment_release` | subcontractors | BEFORE UPDATE | Auto-resets payment hold when risk drops |
 | `trg_on_org_created` | organizations | AFTER INSERT | Bootstraps new org (admin role assignment via trg_bootstrap_org_admin) |
@@ -304,8 +306,9 @@ in_app_notifications, prequal_submissions, nudge_logs, gc_notifications, audit_e
 | Function | Purpose |
 |---|---|
 | `handle_document_org_id()` | Called by tr_documents_set_org_id trigger |
-| `trigger_update_risk_score()` | Called by trg_compliance_risk on compliance_docs |
-| `calculate_subcontractor_risk_score()` | Core 0–100 risk scoring engine |
+| `trg_fn_sync_risk_from_documents()` | Called by trg_sync_risk_ins_del + trg_sync_risk_upd — recalculates risk_score from documents table |
+| `trigger_update_risk_score()` | Legacy — called by inert trg_compliance_risk on compliance_docs |
+| `calculate_subcontractor_risk_score()` | Core risk scoring engine — UPDATED 2026-05-21 to read from documents (is_current=true). Score: 75=critical, 50=elevated, 10=low, +20 for prequal incident |
 | `fn_process_payment_compliance()` | Validates payment cert against compliance state |
 | `fn_audit_payment_block()` | Writes audit_events on payment cert status change |
 | `fn_auto_reset_payment_status()` | Resets hold when risk recovers |

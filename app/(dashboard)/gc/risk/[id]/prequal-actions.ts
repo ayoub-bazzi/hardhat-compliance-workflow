@@ -13,11 +13,13 @@ export async function reviewPrequal(
 ): Promise<PrequalReviewResult> {
   const supabase = await createClient()
 
-  const { error } = await supabase.rpc('fn_review_prequal', {
-    p_prequal_id: prequalId,
-    p_verdict:    verdict,
-    p_notes:      notes.trim() || null,
-  })
+  const { error } = await supabase
+    .from('prequal_submissions')
+    .update({
+      status:       verdict,
+      review_notes: notes.trim() || null,
+    })
+    .eq('id', prequalId)
 
   if (error) return { ok: false, error: error.message }
 

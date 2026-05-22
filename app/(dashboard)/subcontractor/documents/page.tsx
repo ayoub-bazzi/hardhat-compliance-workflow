@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { ShieldCheck, ShieldAlert, Clock, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { formatRejectionReason } from '@/lib/utils'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
@@ -35,10 +36,16 @@ export default async function SubDocumentsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Claim any unclaimed records before querying (idempotent).
-  await supabase.rpc('fn_claim_subcontractor_identity')
+  // Claim any unclaimed records that match this user's email (idempotent).
+  if (user.email) {
+    await supabase
+      .from('subcontractors')
+      .update({ user_id: user.id })
+      .eq('contact_email', user.email)
+      .is('user_id', null)
+  }
 
-  // Query by user_id — the cryptographic binding, not a plain-text email.
+  // Query by user_id — the cryptographic binding set during the claim above.
   const { data: subRows } = await supabase
     .from('subcontractors')
     .select('id, company_name, project_id, projects(id, name)')
@@ -112,9 +119,11 @@ export default async function SubDocumentsPage() {
                   <TableCell>
                     <DocStatusBadge status={doc.status} />
                     {doc.status === 'rejected' && doc.rejection_reason && (
-                      <p className="mt-1 text-xs text-red-500 max-w-[200px] leading-relaxed">
-                        {doc.rejection_reason}
-                      </p>
+                      <ul className="mt-1 space-y-0.5 max-w-[220px]">
+                        {formatRejectionReason(doc.rejection_reason).map((reason, i) => (
+                          <li key={i} className="text-xs text-red-500 leading-relaxed">· {reason}</li>
+                        ))}
+                      </ul>
                     )}
                   </TableCell>
                   <TableCell className="text-sm text-slate-500">

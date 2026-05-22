@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { Users, AlertCircle, ShieldCheck, TrendingUp, Clock } from 'lucide-react'
+import { Users, AlertCircle, ShieldCheck, TrendingUp, Clock, FolderPlus, UserPlus, ScanLine } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase'
 import { getOrgId } from '@/lib/org'
@@ -8,10 +8,6 @@ import { AddProjectDialog } from './add-project-dialog'
 import { CommandCenterTable, type ProjectEnriched } from './command-center-table'
 import { ExpiryButton } from './expiry-scan-button'
 import { NotificationStrip } from './notification-strip'
-import { ComplianceLeaderboard } from '@/components/compliance-leaderboard'
-import { FailureHeatmap } from '@/components/failure-heatmap'
-import { LastSeenWorkers } from '@/components/last-seen-workers'
-import { LatestJournalCard } from '@/components/latest-journal-card'
 import { ShowArchivedToggle } from './show-archived-toggle'
 
 type RiskLevel = 'critical' | 'elevated' | 'low'
@@ -285,6 +281,39 @@ async function CommandCenterData({ showArchived }: { showArchived: boolean }) {
   const riskElevated = subs.filter((s) => classifyRisk(s.id, docsBySub, todayStr) === 'elevated').length
   const riskLow      = subs.filter((s) => classifyRisk(s.id, docsBySub, todayStr) === 'low').length
 
+  // Zero-state onboarding for brand-new GC accounts
+  if (projects.length === 0 && !showArchived) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200 bg-white px-8 py-14 text-center">
+        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
+          <FolderPlus className="h-8 w-8 text-indigo-500" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Welcome to HardHat Compliance</h2>
+        <p className="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
+          Get your first site running in three steps. It takes under two minutes.
+        </p>
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 max-w-2xl mx-auto text-left">
+          {[
+            { step: '1', icon: FolderPlus,  title: 'Create a project',       body: 'Name your site or contract. All subcontractors and documents live here.' },
+            { step: '2', icon: UserPlus,    title: 'Add subcontractors',      body: 'Add each sub by email. Send them an invite link to upload their own docs.' },
+            { step: '3', icon: ScanLine,    title: 'Start gate scanning',     body: 'Use the Gate page to scan QR passes. Only compliant subs get through.' },
+          ].map(({ step, icon: Icon, title, body }) => (
+            <div key={step} className="rounded-xl border border-slate-200 bg-slate-50 p-5">
+              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-white border border-slate-200 text-sm font-bold text-indigo-600 shadow-sm">
+                {step}
+              </div>
+              <p className="text-sm font-semibold text-slate-800">{title}</p>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed">{body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8">
+          <AddProjectDialog />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Global metric cards */}
@@ -325,26 +354,6 @@ async function CommandCenterData({ showArchived }: { showArchived: boolean }) {
         />
       </div>
 
-      {/* Leaderboard + Heatmap */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-          <ComplianceLeaderboard limit={5} />
-        </Suspense>
-        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-          <FailureHeatmap />
-        </Suspense>
-      </div>
-
-      {/* Last seen workers + Latest journal */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-          <LastSeenWorkers limit={5} />
-        </Suspense>
-        <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-          <LatestJournalCard />
-        </Suspense>
-      </div>
-
       {/* Projects table */}
       <CommandCenterTable rows={enriched} />
     </div>
@@ -365,9 +374,9 @@ export default async function GCProjectsPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Command Center</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Global compliance overview across all projects.
+            Compliance status across all your active projects.
           </p>
         </div>
         <div className="flex items-center gap-3">

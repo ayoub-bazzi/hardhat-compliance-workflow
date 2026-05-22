@@ -26,13 +26,11 @@ export async function POST(request: NextRequest) {
       .from('push_subscriptions')
       .upsert(
         {
-          user_id:         user.id,
-          organization_id: profile?.organization_id ?? null,
-          endpoint:        body.endpoint,
-          p256dh:          body.keys.p256dh,
-          auth:            body.keys.auth,
+          user_id:           user.id,
+          organization_id:   profile?.organization_id ?? null,
+          subscription_json: body,
         },
-        { onConflict: 'user_id,endpoint' },
+        { onConflict: 'user_id' },
       )
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -55,7 +53,6 @@ export async function DELETE(request: NextRequest) {
       .from('push_subscriptions')
       .delete()
       .eq('user_id', user.id)
-      .eq('endpoint', endpoint)
 
     return NextResponse.json({ ok: true })
   } catch {

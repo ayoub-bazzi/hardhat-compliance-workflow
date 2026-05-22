@@ -27,7 +27,7 @@ export function PrequalReview({
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [pending, startTransition] = useTransition()
 
-  const status: 'pending' | 'approved' | 'rejected' = 'pending'
+  const status = prequal.status ?? 'pending'
   const cfg    = STATUS_CONFIG[status]
 
   function handleReview(verdict: 'approved' | 'rejected') {
@@ -99,6 +99,14 @@ export function PrequalReview({
             Submitted {new Date(prequal.submitted_at).toLocaleDateString('en-US', {
               month: 'long', day: 'numeric', year: 'numeric',
             })}
+          </div>
+        )}
+
+        {/* Review notes (approved/rejected) */}
+        {status !== 'pending' && prequal.review_notes && (
+          <div className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Review Notes</p>
+            {prequal.review_notes}
           </div>
         )}
 

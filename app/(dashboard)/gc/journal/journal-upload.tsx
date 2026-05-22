@@ -11,7 +11,7 @@ import type { SiteJournal } from '@/types/database.types'
 
 type Phase = 'idle' | 'camera' | 'preview' | 'analyzing' | 'done' | 'error'
 
-const QUALITY_CONFIG = {
+const QUALITY_CONFIG: Record<string, { label: string; cls: string }> = {
   high:   { label: 'High Quality',   cls: 'bg-emerald-100 text-emerald-700 ring-emerald-200' },
   medium: { label: 'Medium Quality', cls: 'bg-amber-100   text-amber-700   ring-amber-200'   },
   low:    { label: 'Low Quality',    cls: 'bg-red-100     text-red-700     ring-red-200'     },
@@ -109,13 +109,18 @@ export function JournalUpload({ projectId }: { projectId?: string }) {
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ photoDataUrl: dataUrl, projectId: projectId ?? null }),
         })
-        const json = await res.json() as { ok?: boolean; journal?: SiteJournal; error?: string }
+        const json = await res.json() as { ok?: boolean; journal?: SiteJournal; photo_signed_url?: string | null; error?: string }
         if (!res.ok || !json.ok || !json.journal) {
           setErrorMsg(json.error ?? 'Analysis failed — please try again.')
           setPhase('error')
           return
         }
-        setJournal(json.journal)
+        // Use the signed URL for immediate display; the DB stores the storage path.
+        const journalWithDisplay = {
+          ...json.journal,
+          photo_url: json.photo_signed_url ?? json.journal.photo_url,
+        }
+        setJournal(journalWithDisplay)
         setPhase('done')
       } catch {
         setErrorMsg('Network error — please check your connection.')
@@ -127,8 +132,8 @@ export function JournalUpload({ projectId }: { projectId?: string }) {
   // ── Render states ──────────────────────────────────────────────
 
   if (phase === 'done' && journal) {
-    const qCfg = QUALITY_CONFIG[journal.photo_quality] ?? QUALITY_CONFIG.medium
-    const paragraphs = journal.ai_summary.split('\n\n').filter(Boolean)
+    const qCfg = QUALITY_CONFIG[journal.ai_quality_rating ?? ''] ?? QUALITY_CONFIG.medium
+    const paragraphs = (journal.ai_summary ?? '').split('\n\n').filter(Boolean)
 
     return (
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -161,18 +166,13 @@ export function JournalUpload({ projectId }: { projectId?: string }) {
             {/* Meta */}
             <div className="sm:col-span-2 space-y-3">
               <div className="flex flex-wrap gap-2">
-                {journal.work_phase && (
-                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-3 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-200">
-                    {journal.work_phase}
-                  </span>
-                )}
                 <span className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-semibold ring-1 ${qCfg.cls}`}>
                   {qCfg.label}
                 </span>
               </div>
 
               {/* Photo quality warning */}
-              {journal.photo_quality === 'low' && (
+              {journal.ai_quality_rating === 'low' && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                   <p className="text-xs text-amber-800">
@@ -185,18 +185,11 @@ export function JournalUpload({ projectId }: { projectId?: string }) {
               <div className="text-xs text-slate-500 space-y-1">
                 <p>
                   <span className="font-medium text-slate-700">Recorded:</span>{' '}
-                  {new Date(journal.created_at).toLocaleString('en-US', {
+                  {journal.created_at ? new Date(journal.created_at).toLocaleString('en-US', {
                     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
                     hour: '2-digit', minute: '2-digit',
-                  })}
+                  }) : '—'}
                 </p>
-                {journal.attendance_context && (
-                  <p>
-                    <span className="font-medium text-slate-700">Attendance:</span>{' '}
-                    {String((journal.attendance_context as Record<string, unknown>).grantedToday ?? 0)} worker entries,{' '}
-                    {String((journal.attendance_context as Record<string, unknown>).uniqueCompanies ?? 0)} compan{Number((journal.attendance_context as Record<string, unknown>).uniqueCompanies) === 1 ? 'y' : 'ies'}
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -210,11 +203,11 @@ export function JournalUpload({ projectId }: { projectId?: string }) {
           </div>
 
           {/* Caveats */}
-          {journal.caveats && journal.caveats.length > 0 && (
+          {journal.ai_caveats && (journal.ai_caveats as string[]).length > 0 && (
             <div className="space-y-2">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">AI Uncertainty Flags</p>
               <div className="flex flex-wrap gap-2">
-                {journal.caveats.map((c, i) => (
+                {(journal.ai_caveats as string[]).map((c, i) => (
                   <span
                     key={i}
                     className="flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800"

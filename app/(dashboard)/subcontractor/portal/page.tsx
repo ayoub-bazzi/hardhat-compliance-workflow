@@ -5,6 +5,7 @@ import {
   BadgeCheck, CircleDollarSign, Camera, UserCheck, Landmark,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { formatRejectionReason } from '@/lib/utils'
 import { createClient, createServiceSupabaseClient } from '@/lib/supabase'
 import { SubUploadDialog } from './sub-upload-dialog'
 import { SafetyPass } from './safety-pass'
@@ -102,7 +103,11 @@ function ProjectCard({
               <div className="space-y-0.5">
                 <p className="text-sm font-medium text-slate-800">{type}</p>
                 {doc?.status === 'rejected' && doc.rejection_reason && (
-                  <p className="text-xs text-red-500">{doc.rejection_reason}</p>
+                  <ul className="space-y-0.5">
+                    {formatRejectionReason(doc.rejection_reason).map((reason, i) => (
+                      <li key={i} className="text-xs text-red-500">· {reason}</li>
+                    ))}
+                  </ul>
                 )}
                 {doc?.expiry_date && doc.status !== 'rejected' && (
                   <p className="text-xs text-slate-400">
@@ -143,7 +148,13 @@ export default async function SubcontractorPortalPage() {
   // First-login claim: bind any unclaimed subcontractor records (where
   // contact_email matches and user_id is still NULL) to this auth.uid().
   // Idempotent — subsequent calls update 0 rows and return nothing.
-  await supabase.rpc('fn_claim_subcontractor_identity')
+  if (user.email) {
+    await supabase
+      .from('subcontractors')
+      .update({ user_id: user.id })
+      .eq('contact_email', user.email)
+      .is('user_id', null)
+  }
 
   // Query by user_id — the cryptographic binding set during the claim above.
   const { data: subRows } = await supabase
@@ -161,6 +172,7 @@ export default async function SubcontractorPortalPage() {
         .from('documents')
         .select('*')
         .in('subcontractor_id', subIds)
+        .eq('is_current', true)
         .order('created_at', { ascending: false })
     : { data: [] }
 
@@ -178,17 +190,16 @@ export default async function SubcontractorPortalPage() {
   const { data: certRows } = subIds.length > 0
     ? await service
         .from('payment_certificates')
-        .select('id, certificate_number, amount_claimed, period_from, period_to, status')
+        .select('id, amount, period_start, period_end, status')
         .in('subcontractor_id', subIds)
         .order('created_at', { ascending: false })
     : { data: [] }
   const certs = (certRows ?? []) as Array<{
     id: string
-    certificate_number: string
-    amount_claimed: number
-    period_from: string
-    period_to: string
-    status: 'pending' | 'escrowed' | 'approved' | 'released'
+    amount: number
+    period_start: string
+    period_end: string
+    status: string | null
   }>
 
   // Fetch GC org name for clearance PDF
@@ -260,7 +271,7 @@ export default async function SubcontractorPortalPage() {
       {/* Safety Pass */}
       <div className="mx-auto max-w-sm">
         <SafetyPass
-          email={user.email}
+          email={user.email ?? ''}
           isCleared={isCleared}
           companyName={companyName}
         />
@@ -382,10 +393,12 @@ export default async function SubcontractorPortalPage() {
                 {/* Cert header */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-mono text-sm font-semibold text-slate-700">{cert.certificate_number}</p>
+                    <p className="font-mono text-sm font-semibold text-slate-700">
+                      CERT-{cert.id.slice(0, 8).toUpperCase()}
+                    </p>
                     <p className="text-xs text-slate-400">
-                      {cert.period_from} → {cert.period_to} ·{' '}
-                      {cert.amount_claimed.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
+                      {cert.period_start} → {cert.period_end} ·{' '}
+                      {(cert.amount ?? 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })}
                     </p>
                   </div>
                   <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
@@ -394,12 +407,12 @@ export default async function SubcontractorPortalPage() {
                     cert.status === 'escrowed' ? 'bg-amber-100 text-amber-700' :
                     'bg-slate-100 text-slate-600'
                   }`}>
-                    {cert.status.charAt(0).toUpperCase() + cert.status.slice(1)}
+                    {cert.status ? cert.status.charAt(0).toUpperCase() + cert.status.slice(1) : 'Pending'}
                   </span>
                 </div>
                 {/* Invoice upload (not shown for released certs) */}
                 {cert.status !== 'released' && (
-                  <InvoiceUpload certId={cert.id} amountClaimed={cert.amount_claimed} />
+                  <InvoiceUpload certId={cert.id} amountClaimed={cert.amount ?? 0} />
                 )}
               </div>
             ))}

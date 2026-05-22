@@ -145,11 +145,12 @@ export async function runExpiryScan(supabase: DBClient): Promise<ExpiryScanResul
   const todayStr    = todayUtc.toISOString().split('T')[0]
   const in30DaysStr = in30Days.toISOString().split('T')[0]
 
-  // 1. Fetch approved docs expiring in the window + subcontractor info
+  // 1. Fetch approved current docs expiring in the window + subcontractor info
   const { data: rawDocs, error: docsError } = await supabase
     .from('documents')
     .select('id, type, expiry_date, subcontractor_id, subcontractors(company_name, contact_email, project_id)')
     .eq('status', 'approved')
+    .eq('is_current', true)
     .not('expiry_date', 'is', null)
     .gte('expiry_date', todayStr)
     .lte('expiry_date', in30DaysStr)

@@ -84,8 +84,6 @@ const EMPTY_EXTRACTION: GeminiExtraction = {
 }
 
 function parseGeminiResponse(text: string): GeminiExtraction {
-  console.log('AI Raw Response:', text)
-
   const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim()
 
   const match = stripped.match(/\{[\s\S]*\}/)

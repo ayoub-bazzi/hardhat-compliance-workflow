@@ -16,28 +16,26 @@ export function MarketingHeader() {
   const [open, setOpen] = useState(false)
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 border-b border-stone-100 bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6 lg:px-8">
+
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 transition-colors group-hover:bg-amber-400">
-            <HardHat className="h-4.5 w-4.5 text-slate-950" />
+        <Link href="/" className="group flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 transition-colors group-hover:bg-orange-600">
+            <HardHat className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-bold tracking-tight text-white">
-            HardHat <span className="text-slate-400 font-normal">Compliance</span>
-          </span>
-          <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-400">
-            Beta
+          <span className="text-sm font-bold text-stone-900">
+            HardHat <span className="font-normal text-stone-400">Compliance</span>
           </span>
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden items-center md:flex">
           {NAV.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
-              className="rounded-md px-3.5 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              className="px-4 py-2 text-sm font-medium text-stone-500 transition-colors hover:text-stone-900"
             >
               {label}
             </Link>
@@ -45,25 +43,25 @@ export function MarketingHeader() {
         </nav>
 
         {/* Desktop CTAs */}
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
           <Link
             href="/login"
-            className="text-sm font-medium text-slate-400 transition-colors hover:text-white"
+            className="text-sm font-medium text-stone-500 transition-colors hover:text-stone-900"
           >
             Sign In
           </Link>
           <Link
             href="/contact"
-            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-400"
+            className="rounded-full bg-stone-900 px-5 py-2 text-sm font-semibold text-white transition-all hover:bg-stone-700 active:scale-95"
           >
-            Start Free Audit
+            Book a Demo
           </Link>
         </div>
 
         {/* Mobile toggle */}
         <button
-          className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-white md:hidden"
-          onClick={() => setOpen((v) => !v)}
+          className="rounded-md p-2 text-stone-500 hover:text-stone-900 md:hidden"
+          onClick={() => setOpen(v => !v)}
           aria-label="Toggle menu"
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -72,33 +70,21 @@ export function MarketingHeader() {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-t border-slate-800 bg-slate-950 px-6 pb-6 md:hidden">
-          <nav className="flex flex-col gap-1 pt-4">
+        <div className="border-t border-stone-100 bg-white px-6 pb-6 md:hidden">
+          <nav className="flex flex-col pt-4">
             {NAV.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
+                className="py-2.5 text-sm font-medium text-stone-600 hover:text-stone-900"
               >
                 {label}
               </Link>
             ))}
-            <div className="mt-4 flex flex-col gap-2 border-t border-slate-800 pt-4">
-              <Link
-                href="/login"
-                onClick={() => setOpen(false)}
-                className="rounded-md px-3 py-2.5 text-sm font-medium text-slate-400 hover:text-white"
-              >
-                Sign In
-              </Link>
-              <Link
-                href="/contact"
-                onClick={() => setOpen(false)}
-                className="rounded-lg bg-amber-500 px-4 py-2.5 text-center text-sm font-semibold text-slate-950 hover:bg-amber-400"
-              >
-                Start Free Audit
-              </Link>
+            <div className="mt-4 flex flex-col gap-3 border-t border-stone-100 pt-4">
+              <Link href="/login" onClick={() => setOpen(false)} className="text-sm text-stone-500">Sign In</Link>
+              <Link href="/contact" onClick={() => setOpen(false)} className="rounded-full bg-stone-900 py-2.5 text-center text-sm font-semibold text-white">Book a Demo</Link>
             </div>
           </nav>
         </div>
